@@ -1,0 +1,53 @@
+{% extends "admin/base.html" %}
+{% block admin_title %}{{ 'Yazıyı düzenle' if post else 'Yeni yazı' }}{% endblock %}
+{% block admin_content %}
+<header class="admin-header blog-editor-header">
+  <div><p>Blog</p><h1>{{ 'Yazıyı düzenle' if post else 'Yeni yazı' }}</h1></div>
+  <div class="blog-editor-actions">
+    <a class="button button--ghost" href="{{ url_for('admin.blog_list') }}"><i data-lucide="arrow-left"></i> Yazılar</a>
+    {% if post and post.published %}<a class="button button--ghost" target="_blank" href="{{ url_for('main.post', slug=post.slug) }}"><i data-lucide="external-link"></i> Görüntüle</a>{% endif %}
+  </div>
+</header>
+<form class="blog-editor-form" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="blog-editor-layout">
+    <section class="admin-card editor-paper">
+      <label class="editor-title"><span>Yazı başlığı</span><input name="title" value="{{ post.title if post else '' }}" required placeholder="Başlığı buraya yazın"></label>
+      <label class="editor-summary"><span>Kısa açıklama</span><textarea name="summary" rows="3" placeholder="Yazının ne anlattığını birkaç cümleyle özetleyin…">{{ post.summary if post else '' }}</textarea></label>
+      <div class="editor-body-heading"><div><span>İçerik</span><small>Markdown</small></div><div class="editor-body-tools"><span data-editor-count>0 kelime</span><label class="editor-image-button"><i data-lucide="image-plus"></i><span>Görsel ekle</span><input class="editor-image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-editor-image-input></label><div class="editor-mode-switch" role="group" aria-label="Editör görünümü"><button class="is-active" type="button" aria-pressed="true" data-editor-mode="write"><i data-lucide="pencil-line"></i> Yazım</button><button type="button" aria-pressed="false" data-editor-mode="preview"><i data-lucide="eye"></i> Önizleme</button></div></div></div>
+      <div class="editor-dropzone" data-image-upload-url="{{ url_for('admin.blog_image_upload') }}" data-editor-pane="write">
+        <textarea class="code-editor editor-body" name="body" rows="24" required data-markdown-editor placeholder="Yazmaya başlayın…">{{ post.body if post else '' }}</textarea>
+        <div class="editor-drop-overlay"><i data-lucide="image-up"></i><strong>Görseli buraya bırakın</strong><span>Sunucuya yüklenip yazıya eklenecek</span></div>
+      </div>
+      <div class="editor-preview is-hidden" data-editor-pane="preview" data-preview-url="{{ url_for('admin.blog_preview') }}"><div class="article-content" data-markdown-preview><div class="editor-preview__empty"><i data-lucide="file-search"></i><span>Önizlemek için içerik yazın.</span></div></div></div>
+      <p class="editor-upload-status" data-upload-status aria-live="polite">Görseli editöre sürükleyip bırakarak yazıya ekleyebilirsiniz.</p>
+      <div class="markdown-hints"><span><code>##</code> Başlık</span><span><code>**metin**</code> Kalın</span><span><code>[metin](url)</code> Bağlantı</span><span><code>-</code> Liste</span></div>
+      <section class="editor-media-library" data-media-library data-delete-url="{{ url_for('admin.blog_image_delete') }}" data-post-slug="{{ post.slug if post else '' }}">
+        <div class="editor-media-library__heading"><div><h3>Yazı görselleri</h3><p>Adresi kopyalamak için görsele tıklayın.</p></div><span data-media-count>{{ post_images | length }}</span></div>
+        <div class="editor-media-grid" data-media-grid>
+          {% for image_url in post_images %}<article class="editor-media-item" data-image-url="{{ image_url }}"><button class="editor-media-copy" type="button" data-copy-image="{{ image_url }}" title="Görsel adresini kopyala"><img src="{{ image_url }}" alt="Yazı görseli"><span>Adresi kopyala</span></button><button class="editor-media-delete" type="button" data-delete-image="{{ image_url }}" aria-label="Görseli sunucudan sil"><i data-lucide="trash-2"></i></button></article>{% endfor %}
+        </div>
+        <p class="editor-media-empty {{ '' if not post_images else 'is-hidden' }}" data-media-empty>Bu yazıya henüz görsel eklenmedi.</p>
+      </section>
+    </section>
+
+    <aside class="editor-sidebar">
+      <section class="admin-card editor-settings">
+        <header><div><h2>Yayın ayarları</h2><p>Yazının görünürlüğü ve bilgileri</p></div></header>
+        <div class="editor-settings__body">
+          <label>Adres kısa adı<input name="slug" value="{{ post.slug if post else '' }}" placeholder="Başlıktan otomatik oluşur"></label>
+          <div class="editor-date-row">
+            <label>Tarih<input name="date" type="date" value="{{ post.date if post else today }}" required></label>
+            <label>Saat<input name="time" type="time" value="{{ post.time if post else now_time }}" required></label>
+          </div>
+          <label>Etiketler<span class="tag-editor" data-tag-editor><span class="tag-editor__list" data-tag-list></span><input class="tag-editor__input" type="text" data-tag-input placeholder="Etiketi yazın ve Enter'a basın" autocomplete="off"><textarea name="tags" hidden data-tag-value>{{ post.tags | join('\n') if post else '' }}</textarea></span><small>Her etiketten sonra Enter tuşuna basın.</small></label>
+          <label>Kapak görseli<span class="image-picker image-picker--cover {{ 'has-image' if post and post.cover }}" data-image-picker><input type="hidden" name="remove_cover" value="0" data-remove-image-input><input class="image-picker__input" name="cover" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><span class="image-picker__preview" data-image-preview>{% if post and post.cover %}<img src="{{ post.cover }}" alt="Mevcut kapak görseli">{% else %}<i data-lucide="image-plus"></i>{% endif %}</span><span class="image-picker__content"><strong data-image-title>{{ 'Kapağı değiştir' if post and post.cover else 'Kapak görseli ekle' }}</strong><small data-image-name>PNG, JPG, WEBP veya GIF · En fazla 5 MB</small><span>Dosya seçin veya buraya sürükleyin</span></span><button class="image-picker__remove" type="button" data-remove-image {% if not post or not post.cover %}hidden{% endif %} aria-label="Blog kapağını kaldır"><i data-lucide="trash-2"></i></button></span></label>
+          <label class="editor-publish"><span><strong>Yayımla</strong><small>Yazı sitede görünür olsun.</small></span><input name="published" type="checkbox" {% if not post or post.published %}checked{% endif %}></label>
+          <button class="button button--primary editor-save" type="submit"><i data-lucide="save"></i> Yazıyı kaydet</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+</form>
+{% if post %}<form class="danger-zone" method="post" action="{{ url_for('admin.blog_delete', slug=post.slug) }}" data-confirm="Bu blog yazısı kalıcı olarak silinsin mi?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div><strong>Yazıyı sil</strong><p>Bu işlem geri alınamaz.</p></div><button type="submit">Kalıcı olarak sil</button></form>{% endif %}
+{% endblock %}

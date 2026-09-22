@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="{{ site.profile.name if site else 'Mustafa Yücel' }} kişisel portfolyo ve özgeçmiş sitesi">
+  <meta name="theme-color" content="{{ {'cobalt': '#080e1a', 'emerald': '#06130f', 'amber': '#151008', 'violet': '#100a18', 'coral': '#160c0d'}.get(site_content.get('branding', {}).get('theme', 'cobalt'), '#080e1a') }}">
+  <script>document.documentElement.classList.add("js-enabled");</script>
+  <title>{% block title %}{{ site.profile.name if site else 'Yönetim' }}{% endblock %}</title>
+  {% if site_content.get('branding', {}).get('favicon') %}<link rel="icon" type="image/png" href="{{ site_content.branding.favicon }}">{% endif %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
+  {% block styles %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}" data-theme="{{ site_content.get('branding', {}).get('theme', 'cobalt') }}">
+  <a class="skip-link" href="#main-content">İçeriğe geç</a>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-stack" aria-live="polite">
+        {% for category, message in messages %}
+          <div class="flash flash--{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="{{ url_for('static', filename='js/site.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

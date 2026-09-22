@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ post.title }} · {{ site.profile.name }}{% endblock %}
+{% block body_class %}inner-page{% endblock %}
+{% block body %}
+<div class="inner-shell">
+  <header class="inner-topbar">
+    <a class="brand-mini" href="{{ url_for('main.home') }}"><img src="{{ site.profile.avatar }}" alt=""><span>{{ site.profile.name }}<small>{{ site.profile.title }}</small></span></a>
+    <a class="button button--ghost" href="{{ url_for('main.blog') }}"><i data-lucide="arrow-left"></i> Tüm yazılar</a>
+  </header>
+  <main class="article-shell" id="main-content">
+    <article>
+      <header class="article-header"><div class="post-card__meta"><time datetime="{{ post.date }}T{{ post.time }}">{{ post.date }} · {{ post.time }}</time></div><h1>{{ post.title }}</h1><p>{{ post.summary }}</p><div class="tag-list">{% for tag in post.tags %}<a href="{{ url_for('main.blog', etiket=tag) }}">#{{ tag }}</a>{% endfor %}</div></header>
+      {% if post.cover %}<img class="article-cover" src="{{ post.cover }}" alt="">{% endif %}
+      <div class="article-content">{{ post.html | safe }}</div>
+      <footer class="article-footer"><a class="text-link" href="{{ url_for('main.blog') }}"><i data-lucide="arrow-left"></i> Bloga dön</a></footer>
+    </article>
+  </main>
+</div>
+{% endblock %}

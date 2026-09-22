@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Yönetim girişi · mCV{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">{% endblock %}
+{% block body_class %}admin-page admin-login-page{% endblock %}
+{% block body %}
+<main class="login-card" id="main-content">
+  <a class="admin-brand" href="{{ url_for('main.home') }}">{% if site_content.get('branding', {}).get('favicon') %}<img class="admin-brand__icon" src="{{ site_content.branding.favicon }}" alt="">{% else %}<span>MY</span>{% endif %}<div>mCV<small>İçerik yönetimi</small></div></a>
+  <div><p class="section-kicker">Güvenli alan</p><h1>Yönetim paneli</h1><p>İçerikleri düzenlemek ve blog yazısı yayımlamak için giriş yapın.</p></div>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Kullanıcı adı<input name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+    <label>Yönetici parolası<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="button button--primary" type="submit">Giriş yap <i data-lucide="arrow-right"></i></button>
+  </form>
+  <a class="text-link" href="{{ url_for('main.home') }}"><i data-lucide="arrow-left"></i> Siteye dön</a>
+</main>
+{% endblock %}

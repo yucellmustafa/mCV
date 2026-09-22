@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Blog · {{ site.profile.name }}{% endblock %}
+{% block body_class %}inner-page{% endblock %}
+{% block body %}
+<div class="inner-shell">
+  <header class="inner-topbar">
+    <a class="brand-mini" href="{{ url_for('main.home') }}"><img src="{{ site.profile.avatar }}" alt=""><span>{{ site.profile.name }}<small>{{ site.profile.title }}</small></span></a>
+    <a class="button button--ghost" href="{{ url_for('main.home') }}#blog"><i data-lucide="arrow-left"></i> Portfolyoya dön</a>
+  </header>
+  <main class="blog-index" id="main-content">
+    <header class="blog-index__header"><h1>Blog</h1></header>
+    <form class="blog-search" method="get" action="{{ url_for('main.blog') }}" role="search">
+      <label for="blog-query">Bloglarda ara</label>
+      <div><i data-lucide="search"></i><input id="blog-query" type="search" name="q" value="{{ query }}" placeholder="Başlık veya içerikte ara…" autocomplete="off"><button type="submit">Ara</button></div>
+      {% if selected_tag %}<input type="hidden" name="etiket" value="{{ selected_tag }}">{% endif %}
+    </form>
+    <nav class="blog-tags" aria-label="Blog etiketleri">
+      <a class="{{ 'is-active' if not selected_tag }}" href="{{ url_for('main.blog', q=query or none) }}">Tümü</a>
+      {% for tag in tags %}<a class="{{ 'is-active' if selected_tag == tag }}" href="{{ url_for('main.blog', q=query or none, etiket=tag) }}">#{{ tag }}</a>{% endfor %}
+    </nav>
+    <div data-blog-results aria-live="polite">{% include "blog/_results.html" %}</div>
+  </main>
+</div>
+{% endblock %}

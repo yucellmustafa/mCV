@@ -1,0 +1,42 @@
+{% extends "admin/base.html" %}
+{% block admin_title %}{{ config.title }}{% endblock %}
+{% block admin_content %}
+{% set return_page = collection_current_page if name == 'projects' else none %}
+<header class="admin-header"><div><p>İçerik yönetimi</p><h1>{{ config.title }}</h1></div><a class="button button--primary" href="{{ url_for('admin.collection', name=name, yeni=1, sayfa=return_page) }}" data-collection-open><i data-lucide="plus"></i> Yeni kayıt</a></header>
+<section class="admin-card collection-list"><header><div><h2>Mevcut kayıtlar</h2><p>Sıralamayı oklarla değiştirebilirsiniz.</p></div><span class="collection-count">{{ items | length }} kayıt</span></header>
+  {% for item_index, item in displayed_items %}
+    {% set item_label = item.title or item.name or item.company or item.institution or item.label %}
+    <article>
+      <span class="collection-index">{{ '%02d' | format(item_index + 1) }}</span>
+      <div><strong>{{ item_label }}</strong><small>{{ item.description or item.role or item.program or item.level or item.url or '' }}</small></div>
+      <div class="collection-actions">
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="index" value="{{ item_index }}">{% if return_page %}<input type="hidden" name="sayfa" value="{{ return_page }}">{% endif %}<button name="action" value="up" aria-label="{{ item_label }} kaydını yukarı taşı"><i data-lucide="chevron-up"></i></button><button name="action" value="down" aria-label="{{ item_label }} kaydını aşağı taşı"><i data-lucide="chevron-down"></i></button></form>
+        <a href="{{ url_for('admin.collection', name=name, duzenle=item_index, sayfa=return_page) }}" aria-label="{{ item_label }} kaydını düzenle"><i data-lucide="pencil"></i></a>
+        <form method="post" data-confirm="Bu kayıt silinsin mi?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="index" value="{{ item_index }}">{% if return_page %}<input type="hidden" name="sayfa" value="{{ return_page }}">{% endif %}<button name="action" value="delete" aria-label="{{ item_label }} kaydını sil"><i data-lucide="trash-2"></i></button></form>
+      </div>
+    </article>
+  {% else %}<p class="empty-state">Bu bölümde henüz kayıt yok. İlk kaydı eklemek için “Yeni kayıt” butonunu kullanın.</p>{% endfor %}
+</section>
+{% if name == 'projects' and collection_total_pages > 1 %}
+  <nav class="admin-pagination" aria-label="Proje sayfaları">
+    <a class="admin-pagination__edge {{ 'is-disabled' if collection_current_page == 1 }}" href="{{ url_for('admin.collection', name=name, sayfa=collection_current_page - 1) if collection_current_page > 1 else '#' }}" aria-label="Önceki proje sayfası" {% if collection_current_page == 1 %}aria-disabled="true" tabindex="-1"{% endif %}><i data-lucide="chevron-left"></i><span>Önceki</span></a>
+    <div>{% for page in range(1, collection_total_pages + 1) %}<a class="{{ 'is-active' if page == collection_current_page }}" href="{{ url_for('admin.collection', name=name, sayfa=page) }}" {% if page == collection_current_page %}aria-current="page"{% endif %}>{{ page }}</a>{% endfor %}</div>
+    <a class="admin-pagination__edge {{ 'is-disabled' if collection_current_page == collection_total_pages }}" href="{{ url_for('admin.collection', name=name, sayfa=collection_current_page + 1) if collection_current_page < collection_total_pages else '#' }}" aria-label="Sonraki proje sayfası" {% if collection_current_page == collection_total_pages %}aria-disabled="true" tabindex="-1"{% endif %}><span>Sonraki</span><i data-lucide="chevron-right"></i></a>
+  </nav>
+{% endif %}
+
+<dialog class="collection-dialog" aria-labelledby="collection-dialog-title" data-collection-dialog data-base-url="{{ url_for('admin.collection', name=name, sayfa=return_page) }}" data-editing="{{ 'true' if edit_item else 'false' }}" {% if edit_item or open_new %}open data-open-on-load{% endif %}>
+  <form class="admin-card admin-form collection-form collection-dialog__panel" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% if return_page %}<input type="hidden" name="sayfa" value="{{ return_page }}">{% endif %}{% if edit_item is not none %}<input type="hidden" name="index" value="{{ edit_index }}">{% endif %}
+    <header><div><p class="collection-dialog__eyebrow">{{ config.title }}</p><h2 id="collection-dialog-title">{{ 'Kaydı düzenle' if edit_item else 'Yeni kayıt' }}</h2><span>Alanları doldurup kaydedin.</span></div><a class="collection-dialog__close" href="{{ url_for('admin.collection', name=name, sayfa=return_page) }}" data-collection-close aria-label="Pencereyi kapat"><i data-lucide="x"></i></a></header>
+    {% for key, label, field_type in config.fields %}
+      <label>{{ label }}
+        {% if field_type == 'textarea' %}<textarea name="{{ key }}" rows="5">{{ edit_item[key] if edit_item else '' }}</textarea>
+        {% elif field_type == 'image' %}<span class="image-picker {{ 'has-image' if edit_item and edit_item[key] }}" data-image-picker><input type="hidden" name="remove_{{ key }}" value="0" data-remove-image-input><input class="image-picker__input" name="{{ key }}" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><span class="image-picker__preview" data-image-preview>{% if edit_item and edit_item[key] %}<img src="{{ edit_item[key] }}" alt="Mevcut proje görseli">{% else %}<i data-lucide="image-plus"></i>{% endif %}</span><span class="image-picker__content"><strong data-image-title>{{ 'Görseli değiştir' if edit_item and edit_item[key] else 'Proje görseli ekle' }}</strong><small data-image-name>PNG, JPG, WEBP veya GIF · En fazla 5 MB</small><span>Dosya seçin veya buraya sürükleyin</span></span><button class="image-picker__remove" type="button" data-remove-image {% if not edit_item or not edit_item[key] %}hidden{% endif %} aria-label="Proje görselini kaldır"><i data-lucide="trash-2"></i></button></span>
+        {% elif field_type == 'tags' %}<span class="tag-editor" data-tag-editor><span class="tag-editor__list" data-tag-list></span><input class="tag-editor__input" type="text" data-tag-input placeholder="Etiketi yazın ve Enter'a basın" autocomplete="off"><textarea name="{{ key }}" hidden data-tag-value>{{ edit_item[key] | join('\n') if edit_item else '' }}</textarea></span><small>Her etiketten sonra Enter tuşuna basın.</small>
+        {% else %}<input name="{{ key }}" type="{{ 'number' if field_type == 'number' else ('url' if field_type == 'url' else 'text') }}" value="{{ edit_item[key] if edit_item else '' }}" {% if field_type == 'number' %}min="0" max="100"{% endif %}>{% endif %}
+      </label>
+    {% endfor %}
+    <div class="form-actions"><button class="button button--primary" type="submit"><i data-lucide="save"></i> {{ 'Değişiklikleri kaydet' if edit_item else 'Kayıt ekle' }}</button><a class="button button--ghost" href="{{ url_for('admin.collection', name=name, sayfa=return_page) }}" data-collection-close>Vazgeç</a></div>
+  </form>
+</dialog>
+{% endblock %}

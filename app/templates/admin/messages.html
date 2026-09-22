@@ -1,0 +1,8 @@
+{% extends "admin/base.html" %}
+{% block admin_title %}Mesajlar{% endblock %}
+{% block admin_content %}
+<header class="admin-header"><div><p>İletişim formu</p><h1>Mesajlar</h1></div></header>
+<section class="message-list">
+  {% for message in messages %}<article class="admin-card message-card {{ 'is-unread' if not message.read }}"><header><div><span>{{ message.name[:1] | upper }}</span><div><h2>{{ message.name }}</h2><a href="mailto:{{ message.email }}">{{ message.email }}</a></div></div><time datetime="{{ message.created_at }}">{{ message.created_at | replace('T', ' ') }}</time></header><h3>{{ message.subject or 'Konu belirtilmedi' }}</h3><p>{{ message.message }}</p><footer>{% if not message.read %}<form method="post" action="{{ url_for('admin.message_read', message_id=message.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button><i data-lucide="check"></i> Okundu işaretle</button></form>{% endif %}<a href="mailto:{{ message.email }}?subject={{ ('Ynt: ' + (message.subject or 'Mesajınız')) | urlencode }}"><i data-lucide="reply"></i> Yanıtla</a><form method="post" action="{{ url_for('admin.message_delete', message_id=message.id) }}" data-confirm="Mesaj silinsin mi?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="danger"><i data-lucide="trash-2"></i> Sil</button></form></footer></article>{% else %}<div class="admin-card empty-state">Henüz mesaj yok.</div>{% endfor %}
+</section>
+{% endblock %}

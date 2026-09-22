@@ -1,0 +1,22 @@
+<aside class="profile-card">
+  <a class="profile-card__identity" href="{{ url_for('main.home') }}#about" data-section-link="about">
+    <span class="avatar-wrap">
+      <img src="{{ site.profile.avatar }}" alt="{{ site.profile.name }}" class="avatar">
+      <span class="status-dot" title="İletişime açık"></span>
+    </span>
+    <span class="profile-card__name">{{ site.profile.name }}</span>
+    <span class="profile-card__role">{{ site.profile.title }}</span>
+  </a>
+  <div class="profile-card__socials" aria-label="Sosyal bağlantılar">
+    {% for social in site.socials %}
+      <a href="{{ social.url }}" target="_blank" rel="noreferrer" aria-label="{{ social.label }}" title="{{ social.label }}">
+        <i data-lucide="{{ social.icon }}"></i>
+      </a>
+    {% endfor %}
+  </div>
+  <div class="profile-card__contact">
+    <div><i data-lucide="map-pin"></i><span>Konum<small>{{ site.profile.location }}</small></span></div>
+    <a href="mailto:{{ site.profile.email }}"><i data-lucide="mail"></i><span>E-posta<small>{{ site.profile.email }}</small></span></a>
+  </div>
+  <a class="profile-card__foot" href="https://github.com/yucellmustafa" target="_blank" rel="noreferrer">Copyleft 2026 @yucellmustafa</a>
+</aside>

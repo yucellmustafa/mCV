@@ -1,0 +1,18 @@
+{% if query or selected_tag %}<div class="search-summary"><span><strong>{{ total_posts }}</strong> yazı bulundu{% if query %}: “{{ query }}”{% endif %}</span><a href="{{ url_for('main.blog') }}">Filtreleri temizle <i data-lucide="x"></i></a></div>{% endif %}
+<div class="blog-index__grid">
+  {% for post in posts %}
+    <article class="post-card post-card--large">
+      <a href="{{ url_for('main.post', slug=post.slug) }}">
+        <div class="post-card__meta"><time datetime="{{ post.date }}T{{ post.time }}">{{ post.date }} · {{ post.time }}</time></div>
+        <h2>{{ post.title }}</h2><p>{{ post.summary }}</p><div class="tag-list">{% for tag in post.tags %}<small>#{{ tag }}</small>{% endfor %}</div><span class="post-card__link">Yazıyı oku <i data-lucide="arrow-right"></i></span>
+      </a>
+    </article>
+  {% else %}<div class="empty-state blog-empty"><i data-lucide="search-x"></i><strong>Eşleşen yazı bulunamadı.</strong><span>Başka bir kelime veya etiket deneyin.</span></div>{% endfor %}
+</div>
+{% if total_pages > 1 %}
+  <nav class="blog-pagination" aria-label="Blog sayfaları">
+    <a class="blog-pagination__edge {{ 'is-disabled' if current_page == 1 }}" href="{{ url_for('main.blog', q=query or none, etiket=selected_tag or none, sayfa=current_page - 1) if current_page > 1 else '#' }}" aria-label="Önceki sayfa" {% if current_page == 1 %}aria-disabled="true" tabindex="-1"{% endif %}><i data-lucide="chevron-left"></i><span>Önceki</span></a>
+    <div>{% for page in range(1, total_pages + 1) %}<a class="{{ 'is-active' if page == current_page }}" href="{{ url_for('main.blog', q=query or none, etiket=selected_tag or none, sayfa=page) }}" {% if page == current_page %}aria-current="page"{% endif %}>{{ page }}</a>{% endfor %}</div>
+    <a class="blog-pagination__edge {{ 'is-disabled' if current_page == total_pages }}" href="{{ url_for('main.blog', q=query or none, etiket=selected_tag or none, sayfa=current_page + 1) if current_page < total_pages else '#' }}" aria-label="Sonraki sayfa" {% if current_page == total_pages %}aria-disabled="true" tabindex="-1"{% endif %}><span>Sonraki</span><i data-lucide="chevron-right"></i></a>
+  </nav>
+{% endif %}

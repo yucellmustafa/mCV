@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% block admin_title %}Genel bakış{% endblock %}
+{% block admin_content %}
+<header class="admin-header"><div><p>Yönetim paneli</p><h1>Genel bakış</h1></div><a class="button button--primary" href="{{ url_for('admin.blog_edit') }}"><i data-lucide="plus"></i> Yeni yazı</a></header>
+<div class="stat-grid">
+  <article><i data-lucide="briefcase-business"></i><div><strong>{{ site.experiences | length }}</strong><span>İş deneyimi</span></div></article>
+  <article><i data-lucide="panels-top-left"></i><div><strong>{{ site.projects | length }}</strong><span>Proje</span></div></article>
+  <article><i data-lucide="notebook-pen"></i><div><strong>{{ posts | length }}</strong><span>Blog yazısı</span></div></article>
+  <article><i data-lucide="mail"></i><div><strong>{{ messages | rejectattr('read') | list | length }}</strong><span>Okunmamış mesaj</span></div></article>
+</div>
+<div class="admin-columns">
+  <section class="admin-card"><header><div><h2>Son blog yazıları</h2><p>En son eklenen 3 içerik</p></div><a href="{{ url_for('admin.blog_list') }}">Tümünü gör</a></header>
+    <div class="admin-list">
+      {% for post in posts[:3] %}<div><span class="list-icon"><i data-lucide="file-text"></i></span><div><strong>{{ post.title }}</strong><small>{{ post.date }} · {{ post.time }}</small></div><span class="status-pill {{ '' if post.published else 'status-pill--draft' }}">{{ 'Yayında' if post.published else 'Taslak' }}</span><a class="icon-button" href="{{ url_for('admin.blog_edit', slug=post.slug) }}" aria-label="Düzenle"><i data-lucide="pencil"></i></a></div>{% else %}<p class="empty-state">Henüz blog yazısı yok.</p>{% endfor %}
+    </div>
+  </section>
+  <section class="admin-card"><header><div><h2>Hızlı düzenle</h2><p>Site bölümlerine ulaşın</p></div></header>
+    <div class="quick-grid">
+      <a href="{{ url_for('admin.profile') }}"><i data-lucide="user-round"></i><span>Profil ve marka</span></a>
+      <a href="{{ url_for('admin.site_texts') }}"><i data-lucide="text-cursor-input"></i><span>Site metinleri</span></a>
+      <a href="{{ url_for('admin.collection', name='experiences') }}"><i data-lucide="file-user"></i><span>Özgeçmiş</span></a>
+      <a href="{{ url_for('admin.collection', name='projects') }}"><i data-lucide="briefcase-business"></i><span>Projeler</span></a>
+      <a href="{{ url_for('admin.blog_edit') }}"><i data-lucide="square-pen"></i><span>Blog yazısı</span></a>
+      <a href="{{ url_for('admin.messages') }}"><i data-lucide="inbox"></i><span>Mesajlar</span></a>
+    </div>
+  </section>
+</div>
+{% endblock %}

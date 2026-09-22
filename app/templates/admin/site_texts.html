@@ -1,0 +1,24 @@
+{% extends "admin/base.html" %}
+{% block admin_title %}Site metinleri{% endblock %}
+{% block admin_content %}
+<header class="admin-header"><div><p>Ana sayfa içeriği</p><h1>Site metinleri</h1></div></header>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="site-copy-layout">
+    <section class="admin-card admin-form site-copy-form">
+      <header><div><h2>Tanıtım metinleri</h2><p>Ana sayfanın ilk bölümünde gösterilir</p></div></header>
+      <div class="form-grid">
+        <label class="span-2">Üst etiket<input name="eyebrow" value="{{ site.profile.eyebrow }}" required data-copy-input="eyebrow"></label>
+        <label>Ana büyük başlık<input name="hero_title" value="{{ site.profile.hero_title }}" required data-copy-input="title"></label>
+        <label>Vurgulu başlık satırı<input name="hero_highlight" value="{{ site.profile.hero_highlight }}" required data-copy-input="highlight"></label>
+        <label class="span-2">Hakkımda<textarea name="bio" rows="8" required data-copy-input="bio">{{ site.profile.bio }}</textarea></label>
+      </div>
+      <div class="form-actions"><button class="button button--primary" type="submit"><i data-lucide="save"></i> Metinleri kaydet</button></div>
+    </section>
+    <aside class="admin-card site-copy-preview">
+      <header><div><h2>Canlı önizleme</h2><p>Ana sayfadaki metin düzeni</p></div><i data-lucide="eye"></i></header>
+      <div><small data-copy-preview="eyebrow">{{ site.profile.eyebrow }}</small><h2><span data-copy-preview="title">{{ site.profile.hero_title }}</span><strong data-copy-preview="highlight">{{ site.profile.hero_highlight }}</strong></h2><p data-copy-preview="bio">{{ site.profile.bio }}</p></div>
+    </aside>
+  </div>
+</form>
+{% endblock %}

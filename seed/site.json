@@ -1,0 +1,205 @@
+{
+  "branding": {
+    "favicon": "/media/branding/favicon.png",
+    "theme": "cobalt"
+  },
+  "contact": {
+    "eyebrow": "Birlikte çalışalım",
+    "title": "Bir sorun varsa,",
+    "highlight": "çözümü konuşalım."
+  },
+  "profile": {
+    "name": "Mustafa Yücel",
+    "title": "Bilgi İşlem Uzmanı",
+    "eyebrow": "Sistemler · Ağlar · Açık Kaynak",
+    "hero_title": "Sorunu anlar,",
+    "hero_highlight": "çözümü çalıştırırım.",
+    "bio": "Teknoloji ile iç içeyim ve kendimi geliştirmeyi seviyorum. Yeni şeyler öğrenmek ve deneyimlemekten keyif alırım. İş yerindeki temel amacım bulunduğum yere bir şeyler katabilmek. Bir sorun varsa onu sorunsuz bir şekilde çözmek için çabalarım.",
+    "email": "yucellmustafax@gmail.com",
+    "phone": "+90 542 497 63 99",
+    "location": "Kayseri, Türkiye",
+    "birthdate": "01.04.2002",
+    "marital_status": "Bekar",
+    "military_status": "Askerlik Yapıldı",
+    "driving_license": "A2 - B",
+    "avatar": "/media/branding/profile.png"
+  },
+  "services": [
+    {
+      "icon": "network",
+      "title": "Ağ & Sistem",
+      "description": "Kablolu ve kablosuz ağların kurulumu, OpenWrt çözümleri ve sistemlerin kesintisiz çalışması."
+    },
+    {
+      "icon": "shield-check",
+      "title": "Teknik Destek",
+      "description": "Bilgisayar, internet, güvenlik kameraları ve çevre birimleri için sahada hızlı çözüm."
+    },
+    {
+      "icon": "code-2",
+      "title": "Web Çözümleri",
+      "description": "İhtiyaca odaklanan, hızlı ve sürdürülebilir tanıtım siteleri ile küçük ölçekli uygulamalar."
+    },
+    {
+      "icon": "printer",
+      "title": "Donanım & Üretim",
+      "description": "Donanım kurulumu, bakım, 3B baskı ve teknik çizim süreçlerinde pratik uygulama."
+    }
+  ],
+  "experiences": [
+    {
+      "period": "Ocak 2025 — Temmuz 2026",
+      "company": "İnovative Bilişim",
+      "role": "Bilgi İşlem Teknikeri",
+      "location": "Uğurevler, Kocasinan, Kayseri",
+      "description": "Kültür ve Turizm Bakanlığı'nın Kayseri ve çevresi bilgi işlem süreçlerinde görev aldım. Bilgisayar ve internet sistemlerine bakım, onarım ve kurulum yaptım. Yapı Kredi, VakıfBank ve PTT ATM ile şubelerinin zayıf akım teknik servisliğini yürüttüm."
+    },
+    {
+      "period": "Aralık 2024 — Ocak 2025",
+      "company": "MNZ Bilişim",
+      "role": "Saha Teknikeri",
+      "location": "Düvenönü, Kayseri",
+      "description": "Güvenlik kameraları, internet sistemleri ve çanak anten kurulumu gibi zayıf akım işleri yaptım."
+    },
+    {
+      "period": "Ekim — Kasım 2024",
+      "company": "Alke Pano Metal",
+      "role": "Bilgi İşlem Destek",
+      "location": "Mimarsinan OSB, Kayseri",
+      "description": "Toki gibi konutların elektrik panolarının baştan sona montaj işlerinde görev aldım."
+    }
+  ],
+  "education": [
+    {
+      "period": "2023 — Devam",
+      "institution": "İstanbul Üniversitesi",
+      "program": "Bilgisayar Programcılığı",
+      "department": "Açık ve Uzaktan Eğitim Fakültesi"
+    },
+    {
+      "period": "2021 — Terk",
+      "institution": "Zonguldak Bülent Ecevit Üniversitesi",
+      "program": "Elektrik ve Elektronik Mühendisliği",
+      "department": "Mühendislik Fakültesi"
+    }
+  ],
+  "projects": [
+    {
+      "title": "OpenWrt Rehberleri",
+      "description": "Youtube üzerinden açık kaynak router yazılımı olan OpenWrt’ nin kurulum ve kullanım\r\neğitimlerini yayınladım ve bunları blog yazılarım ile destekledim.",
+      "url": "https://youtube.com/@yucellmustafa",
+      "image": "",
+      "tags": [
+        "OpenWrt",
+        "Ağ"
+      ]
+    },
+    {
+      "title": "Öğrenci Yurtları İnternet Altyapısı",
+      "description": "Zonguldak’ta bulunan gigabit altyapıya sahip 2 tane öğrenci yurdunun router, switch ve\r\nAP kurulumlarını yaptım. Routerda mikrotik sistemini ve AP’lerde OpenWrt kullandım. Bu altyapılarda kullanıcı girişi ve adil kullanım için sınırlandırma gibi özelliklere de yer verdim.",
+      "url": "",
+      "image": "",
+      "tags": [
+        "Ağ"
+      ]
+    },
+    {
+      "title": "Dinç Bor Yalıtım Tanıtım Sitesi",
+      "description": "Bor yalıtımı yapan firma için bir tanıtım websitesi yaptım. Bu websitesinin maaliyetini\r\nazaltmak için github üzerinden hostlayarak jekyll teknolojisini kullandım.",
+      "url": "https://dincboryalitim.com",
+      "image": "",
+      "tags": [
+        "Web",
+        "Development"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "name": "Bilgisayar yazılımı ve donanımı",
+      "level": 88,
+      "group": "Teknik"
+    },
+    {
+      "name": "Ağ sistemleri",
+      "level": 86,
+      "group": "Teknik"
+    },
+    {
+      "name": "Linux & OpenWrt",
+      "level": 84,
+      "group": "Teknik"
+    },
+    {
+      "name": "Ofis programları",
+      "level": 90,
+      "group": "Araçlar"
+    },
+    {
+      "name": "SolidWorks & AutoCAD",
+      "level": 68,
+      "group": "Araçlar"
+    },
+    {
+      "name": "Photoshop & Affinity Designer",
+      "level": 72,
+      "group": "Tasarım"
+    },
+    {
+      "name": "Canva & CapCut",
+      "level": 78,
+      "group": "Tasarım"
+    }
+  ],
+  "languages": [
+    {
+      "name": "Türkçe",
+      "level": "Anadil"
+    },
+    {
+      "name": "İngilizce",
+      "level": "A2"
+    }
+  ],
+  "interests": [
+    {
+      "icon": "clapperboard",
+      "name": "Film ve dizi"
+    },
+    {
+      "icon": "headphones",
+      "name": "Müzik"
+    },
+    {
+      "icon": "gamepad-2",
+      "name": "Bilgisayar oyunu"
+    },
+    {
+      "icon": "activity",
+      "name": "Futbol"
+    }
+  ],
+  "socials": [
+    {
+      "icon": "github",
+      "label": "GitHub",
+      "url": "https://github.com/yucellmustafa"
+    },
+    {
+      "icon": "linkedin",
+      "label": "LinkedIn",
+      "url": "https://linkedin.com/in/yucellmustafa"
+    },
+    {
+      "icon": "youtube",
+      "label": "YouTube",
+      "url": "https://youtube.com/@yucellmustafa"
+    },
+    {
+      "icon": "send",
+      "label": "Telegram",
+      "url": "https://t.me/yucellmustafa"
+    }
+  ],
+  "certificates": []
+}

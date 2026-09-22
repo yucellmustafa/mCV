@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{% block admin_title %}Yönetim{% endblock %} · mCV{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">{% endblock %}
+{% block body_class %}admin-page{% endblock %}
+{% block body %}
+<div class="admin-shell">
+  <button class="admin-menu-toggle" type="button" aria-controls="admin-sidebar" aria-expanded="false">
+    <i data-lucide="menu"></i><span>Menü</span>
+  </button>
+  <button class="admin-menu-backdrop" type="button" aria-label="Yönetim menüsünü kapat" aria-hidden="true" tabindex="-1"></button>
+  <aside class="admin-sidebar" id="admin-sidebar">
+    <a class="admin-brand" href="{{ url_for('admin.dashboard') }}">{% if site_content.get('branding', {}).get('favicon') %}<img class="admin-brand__icon" src="{{ site_content.branding.favicon }}" alt="">{% else %}<span>MY</span>{% endif %}<div>mCV<small>Yönetim paneli</small></div></a>
+    <nav>
+      <a class="{{ 'is-active' if request.endpoint == 'admin.dashboard' }}" href="{{ url_for('admin.dashboard') }}"><i data-lucide="layout-dashboard"></i> Genel bakış</a>
+
+      <details class="admin-nav-group" {% if request.endpoint in ['admin.profile', 'admin.site_texts'] or (request.endpoint == 'admin.collection' and request.view_args.get('name') in ['services', 'socials']) %}open{% endif %}>
+        <summary><span><i data-lucide="panels-top-left"></i> Site</span><i data-lucide="chevron-down"></i></summary>
+        <div>
+          <a class="{{ 'is-active' if request.endpoint == 'admin.profile' }}" href="{{ url_for('admin.profile') }}">Profil ve marka</a>
+          <a class="{{ 'is-active' if request.endpoint == 'admin.site_texts' }}" href="{{ url_for('admin.site_texts') }}">Site metinleri</a>
+          <a class="{{ 'is-active' if request.endpoint == 'admin.collection' and request.view_args.get('name') == 'services' }}" href="{{ url_for('admin.collection', name='services') }}">Hizmetler</a>
+          <a class="{{ 'is-active' if request.endpoint == 'admin.collection' and request.view_args.get('name') == 'socials' }}" href="{{ url_for('admin.collection', name='socials') }}">Sosyal bağlantılar</a>
+        </div>
+      </details>
+
+      <details class="admin-nav-group" {% if request.endpoint == 'admin.collection' and request.view_args.get('name') in ['experiences', 'education', 'skills', 'languages', 'interests', 'certificates'] %}open{% endif %}>
+        <summary><span><i data-lucide="file-user"></i> Özgeçmiş</span><i data-lucide="chevron-down"></i></summary>
+        <div>
+          <a class="{{ 'is-active' if request.view_args.get('name') == 'experiences' }}" href="{{ url_for('admin.collection', name='experiences') }}">İş deneyimleri</a>
+          <a class="{{ 'is-active' if request.view_args.get('name') == 'education' }}" href="{{ url_for('admin.collection', name='education') }}">Eğitim</a>
+          <a class="{{ 'is-active' if request.view_args.get('name') == 'skills' }}" href="{{ url_for('admin.collection', name='skills') }}">Yetenekler</a>
+          <a class="{{ 'is-active' if request.view_args.get('name') == 'languages' }}" href="{{ url_for('admin.collection', name='languages') }}">Diller</a>
+          <a class="{{ 'is-active' if request.view_args.get('name') == 'interests' }}" href="{{ url_for('admin.collection', name='interests') }}">Hobiler</a>
+          <a class="{{ 'is-active' if request.view_args.get('name') == 'certificates' }}" href="{{ url_for('admin.collection', name='certificates') }}">Sertifikalar</a>
+        </div>
+      </details>
+
+      <details class="admin-nav-group" {% if (request.endpoint == 'admin.collection' and request.view_args.get('name') == 'projects') or request.endpoint in ['admin.blog_list', 'admin.blog_edit', 'admin.blog_delete'] %}open{% endif %}>
+        <summary><span><i data-lucide="library-big"></i> İçerikler</span><i data-lucide="chevron-down"></i></summary>
+        <div>
+          <a class="{{ 'is-active' if request.endpoint == 'admin.collection' and request.view_args.get('name') == 'projects' }}" href="{{ url_for('admin.collection', name='projects') }}">Projeler</a>
+          <a class="{{ 'is-active' if request.endpoint in ['admin.blog_list', 'admin.blog_edit'] }}" href="{{ url_for('admin.blog_list') }}">Blog yazıları</a>
+        </div>
+      </details>
+
+    </nav>
+    <div class="admin-sidebar__bottom">
+      <a class="admin-sidebar__messages {{ 'is-active' if request.endpoint in ['admin.messages', 'admin.message_read', 'admin.message_delete'] }}" href="{{ url_for('admin.messages') }}"><i data-lucide="inbox"></i><span>Gelen mesajlar</span>{% if unread_message_count %}<strong class="message-badge" aria-label="{{ unread_message_count }} okunmamış mesaj">{{ '99+' if unread_message_count > 99 else unread_message_count }}</strong>{% endif %}</a>
+      <div class="admin-sidebar__footer">
+        <a href="{{ url_for('main.home') }}" target="_blank"><i data-lucide="external-link"></i> Siteyi aç</a>
+        <form method="post" action="{{ url_for('admin.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button><i data-lucide="log-out"></i> Çıkış yap</button></form>
+      </div>
+    </div>
+  </aside>
+  <main class="admin-main" id="main-content">
+    {% block admin_content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

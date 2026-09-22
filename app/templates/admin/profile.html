@@ -1,0 +1,65 @@
+{% extends "admin/base.html" %}
+{% block admin_title %}Profil ve marka{% endblock %}
+{% block admin_content %}
+<header class="admin-header"><div><p>Kimlik ve görsel ayarlar</p><h1>Profil ve marka</h1></div></header>
+<form class="profile-admin-form" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="profile-admin-layout">
+    <div class="profile-admin-main">
+      <section class="admin-card profile-section">
+        <header><div><h2>Temel bilgiler</h2><p>Sitede görünen kimlik ve iletişim bilgileri</p></div><i data-lucide="contact-round"></i></header>
+        <div class="profile-section__body form-grid">
+          <label>Ad soyad<input name="name" value="{{ site.profile.name }}" autocomplete="name" required></label>
+          <label>Unvan<input name="title" value="{{ site.profile.title }}" required></label>
+          <label>E-posta<input name="email" type="email" value="{{ site.profile.email }}" autocomplete="email" spellcheck="false"></label>
+          <label>Telefon<input name="phone" type="tel" value="{{ site.profile.phone }}" autocomplete="tel"></label>
+          <label class="span-2">Konum<input name="location" value="{{ site.profile.location }}" autocomplete="address-level2"></label>
+        </div>
+      </section>
+
+      <section class="admin-card profile-section">
+        <header><div><h2>Kişisel bilgiler</h2><p>Özgeçmişte kullanılan kısa bilgiler</p></div><i data-lucide="badge-info"></i></header>
+        <div class="profile-section__body form-grid">
+          <label>Doğum tarihi<input name="birthdate" value="{{ site.profile.birthdate }}"></label>
+          <label>Medeni durum<input name="marital_status" value="{{ site.profile.marital_status }}"></label>
+          <label>Askerlik durumu<input name="military_status" value="{{ site.profile.military_status }}"></label>
+          <label>Ehliyet<input name="driving_license" value="{{ site.profile.driving_license }}"></label>
+        </div>
+      </section>
+    </div>
+
+    <aside class="admin-card profile-brand-card">
+      <header><div><h2>Marka görselleri</h2><p>Profil fotoğrafı ve tarayıcı ikonu</p></div><i data-lucide="shapes"></i></header>
+      <div class="profile-brand-card__body">
+        <label>Profil görseli
+          <span class="image-picker image-picker--portrait has-image" data-image-picker><input class="image-picker__input" name="avatar" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><span class="image-picker__preview" data-image-preview><img src="{{ site.profile.avatar }}" alt="Mevcut profil görseli"></span><span class="image-picker__content"><strong>Profil görselini değiştir</strong><small data-image-name>PNG, JPG, WEBP veya GIF · En fazla 5 MB</small><span>Dosya seçin veya sürükleyin</span></span></span>
+        </label>
+        <label>Favicon
+          <span class="image-picker image-picker--favicon {{ 'has-image' if site.get('branding', {}).get('favicon') }}" data-image-picker><input class="image-picker__input" name="favicon" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><span class="image-picker__preview" data-image-preview>{% if site.get('branding', {}).get('favicon') %}<img src="{{ site.branding.favicon }}" alt="Mevcut favicon">{% else %}<i data-lucide="image-plus"></i>{% endif %}</span><span class="image-picker__content"><strong>Favicon'u değiştir</strong><small data-image-name>Otomatik olarak 512 × 512 PNG yapılır</small><span>Dosya seçin veya sürükleyin</span></span></span>
+        </label>
+        <div class="brand-note"><i data-lucide="info"></i><p>Profil görseli ve favicon sabit dosya adlarıyla saklanır. Yeni yükleme mevcut görselin yerini alır.</p></div>
+        <section class="theme-section">
+          <div class="theme-section__heading"><div><h3>Site renkleri</h3><p>Site ve yönetim paneli için bir palet seçin.</p></div><i data-lucide="palette"></i></div>
+          <div class="theme-dropdown">
+            <span class="theme-dropdown__swatches" aria-hidden="true"><i data-theme-swatch></i><i data-theme-swatch></i><i data-theme-swatch></i></span>
+            <span class="theme-dropdown__select">
+              <select name="theme" data-theme-select aria-label="Site renk teması">
+                {% for value, name, description, colors in [
+                  ('cobalt', 'Kobalt Gece', 'Teknik ve dengeli', '#5c7cff,#57d8c1,#111c30'),
+                  ('emerald', 'Orman', 'Sakin ve doğal', '#2ebd85,#b6ed72,#102920'),
+                  ('amber', 'Kehribar', 'Sıcak ve güvenli', '#e9a33f,#7fd6bf,#2a1e11'),
+                  ('violet', 'Ametist', 'Yaratıcı ve modern', '#9668f5,#ef82c8,#251834'),
+                  ('coral', 'Mercan', 'Canlı ve karakterli', '#ef6e63,#f2c66d,#2d1a1c')
+                ] %}<option value="{{ value }}" data-description="{{ description }}" data-colors="{{ colors }}" {% if site.get('branding', {}).get('theme', 'cobalt') == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
+              </select>
+              <i data-lucide="chevron-down"></i>
+            </span>
+          </div>
+          <p class="theme-dropdown__description" data-theme-description></p>
+        </section>
+      </div>
+    </aside>
+  </div>
+  <div class="profile-savebar"><span><i data-lucide="shield-check"></i> Değişiklikler JSON içeriğine güvenli biçimde kaydedilir.</span><button class="button button--primary" type="submit"><i data-lucide="save"></i> Profili kaydet</button></div>
+</form>
+{% endblock %}
