@@ -10,7 +10,7 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from .content import _atomic_write_text, _validate_state
+from .content import _validate_state
 
 
 BACKUP_FORMAT = "mcv-backup"
@@ -197,17 +197,15 @@ def _extract_and_validate(archive, destination, entries, infos):
         _validate_state(destination / "state" / "site.json", destination / "state" / "messages.json")
     except (OSError, RuntimeError, UnicodeDecodeError) as error:
         raise BackupError("Yedekteki site verileri geçersiz.") from error
-    _atomic_write_text(destination / ".initialized", "1\n")
 
 
 def restore_backup(storage_root, input_file, max_files=5000, max_uncompressed_size=512 * 1024 * 1024):
     storage_root = Path(storage_root).resolve()
     if not storage_root.is_dir():
         raise BackupError("Mevcut kalıcı depolama bulunamadı.")
-    storage_root.parent.mkdir(parents=True, exist_ok=True)
-    staging_parent = Path(tempfile.mkdtemp(prefix=".mcv-restore-", dir=storage_root.parent))
-    staging_root = staging_parent / "storage"
-    rollback_root = storage_root.parent / f".{storage_root.name}.rollback-{os.urandom(8).hex()}"
+    workspace = Path(tempfile.mkdtemp(prefix=".mcv-restore-", dir=storage_root))
+    staging_root = workspace / "staging"
+    rollback_root = workspace / "rollback"
 
     try:
         try:
@@ -220,16 +218,30 @@ def restore_backup(storage_root, input_file, max_files=5000, max_uncompressed_si
         if not _restore_lock.acquire(blocking=False):
             raise BackupError("Başka bir geri yükleme işlemi halen devam ediyor.")
         try:
-            os.replace(storage_root, rollback_root)
+            rollback_root.mkdir()
+            replaced = []
             try:
-                os.replace(staging_root, storage_root)
+                for directory_name in BACKUP_DIRECTORIES:
+                    current = storage_root / directory_name
+                    previous = rollback_root / directory_name
+                    replacement = staging_root / directory_name
+                    os.replace(current, previous)
+                    try:
+                        os.replace(replacement, current)
+                    except Exception:
+                        os.replace(previous, current)
+                        raise
+                    replaced.append(directory_name)
             except Exception:
-                os.replace(rollback_root, storage_root)
+                for directory_name in reversed(replaced):
+                    current = storage_root / directory_name
+                    previous = rollback_root / directory_name
+                    if current.exists():
+                        shutil.rmtree(current)
+                    os.replace(previous, current)
                 raise
-            with suppress(OSError):
-                shutil.rmtree(rollback_root)
         finally:
             _restore_lock.release()
     finally:
         with suppress(OSError):
-            shutil.rmtree(staging_parent)
+            shutil.rmtree(workspace)

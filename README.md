@@ -9,6 +9,7 @@ Flask ile geliştirilmiş, yönetim panelli kişisel özgeçmiş, portfolyo ve b
 - Özgeçmiş, yetenek, proje ve iletişim bölümleri
 - Markdown tabanlı blog, arama ve etiket filtreleme
 - İçerik, mesaj ve görsel yönetim paneli
+- Yönetici parolasıyla korunan tam ZIP yedekleme ve geri yükleme
 - CSRF koruması ve doğrulanan görsel yükleme
 - Docker healthcheck ve kalıcı veri volume'u
 - Masaüstü ve mobil uyumlu arayüz
@@ -18,10 +19,16 @@ Flask ile geliştirilmiş, yönetim panelli kişisel özgeçmiş, portfolyo ve b
 Uygulamanın yalnızca üç zorunlu ortam değişkeni vardır:
 
 ```dotenv
-SECRET_KEY='uretme-komutunun-ciktisini-buraya-yapistirin'
-ADMIN_USERNAME='yonetici'
-ADMIN_PASSWORD='benzersiz-ve-guclu-bir-parola'
+SECRET_KEY=uretme-komutunun-ciktisini-buraya-yapistirin
+ADMIN_USERNAME=yonetici
+ADMIN_PASSWORD=benzersiz-ve-guclu-bir-parola
 ```
+
+Üretim gereksinimleri:
+
+- `SECRET_KEY` en az 32 karakter olmalıdır.
+- `ADMIN_PASSWORD` en az 20 karakter olmalıdır.
+- `ADMIN_USERNAME` başında veya sonunda boşluk içermemelidir.
 
 `SECRET_KEY` üretmek için:
 
@@ -29,9 +36,13 @@ ADMIN_PASSWORD='benzersiz-ve-guclu-bir-parola'
 python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
-Eksik veya boş bir değerle uygulama başlamaz. `.env` dosyası Git ve Docker build context dışında tutulur.
+Eksik, boş veya gereksinimleri karşılamayan bir değerle uygulama başlamaz. `.env` dosyası Git ve Docker build context dışında tutulur; repodaki `.env.example` yalnız güvenli yer tutucular içerir.
 
 ## Yerel Geliştirme
+
+Python 3.12 veya daha yeni bir sürüm kullanın.
+
+### Linux ve macOS
 
 ```bash
 python3 -m venv .venv
@@ -50,13 +61,34 @@ set +a
 python run.py
 ```
 
+### Windows PowerShell
+
+```powershell
+py -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
+```
+
+`.env` içindeki üç değeri doldurduktan sonra değişkenleri mevcut PowerShell oturumuna yükleyip uygulamayı başlatın:
+
+```powershell
+Get-Content .env | ForEach-Object {
+  if ($_ -match '^(?!#)\s*([^=]+)=(.*)$') {
+    [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process')
+  }
+}
+& .\.venv\Scripts\python.exe run.py
+```
+
+Uygulama `python-dotenv` kullanmaz; `.env` değerleri uygulama başlamadan önce kabuk ortamına yüklenmelidir.
+
 Site `http://127.0.0.1:5000`, yönetim girişi `http://127.0.0.1:5000/admin/giris` adresindedir. `run.py` yalnız geliştirme için debug modunu açar ve güvenli cookie zorunluluğunu yerel HTTP için kapatır.
 
 ## Docker Doğrulaması
 
 `compose.yaml`, yerel image ve volume doğrulaması içindir:
 
-Henüz oluşturmadıysan `.env.example` dosyasını `.env` olarak kopyala, üç değeri doldur ve dosya iznini `600` yap.
+Henüz oluşturmadıysanız `.env.example` dosyasını `.env` olarak kopyalayın ve üç değeri doldurun. Linux/macOS üzerinde `chmod 600 .env` ile dosya erişimini sınırlandırın.
 
 ```bash
 docker compose up -d --build
@@ -77,7 +109,7 @@ docker compose down
 
 ## Kalıcı Veri
 
-İlk açılışta `seed/` içeriği `storage/` dizinine kopyalanır. Sonraki açılışlar mevcut veriyi değiştirmez.
+İlk açılışta `seed/site.json`, `seed/blog`, `seed/uploads` ve `seed/branding` içeriği `storage/` yapısına kopyalanır; mesaj listesi boş oluşturulur. `storage/.initialized` işaretinden sonraki açılışlar mevcut veriyi değiştirmez. Bu nedenle sonraki deployment'larda `seed/` değişiklikleri üretim verisine otomatik birleştirilmez.
 
 ```text
 storage/
@@ -89,11 +121,37 @@ storage/
 
 Docker ve Coolify yalnız `/app/storage` yolunu kalıcı volume olarak bağlar. Dosya tabanlı veri modeli nedeniyle uygulama tek worker, tek thread ve tek replica ile çalışır.
 
+## Yedekleme ve Geri Yükleme
+
+Yönetim panelindeki `/admin/yedekleme` sayfası taşınabilir bir mCV ZIP yedeği oluşturur. Arşiv şunları içerir:
+
+- Site ayarları ve iletişim mesajları
+- Blog yazıları
+- Yüklenen proje ve blog görselleri
+- Profil görseli ve favicon
+- Dosya boyutlarıyla SHA-256 sağlama toplamlarını içeren sürümlü manifest
+
+Geri yükleme arşiv yollarını, dosya türlerini, dosya sayısını, açılmış toplam boyutu ve sağlama toplamlarını doğrular. Doğrulama tamamlanmadan canlı veri değiştirilmez; işlem yönetici parolasının yeniden girilmesini gerektirir. Varsayılan limitler yüklenen ZIP için 256 MB, açılmış içerik için 512 MB ve 5.000 dosyadır.
+
+Geri yükleme, mevcut `state`, `blog`, `uploads` ve `branding` içeriğini yedekteki sürümle tamamen değiştirir. İşlemden önce güncel bir yedek indirin. ZIP dosyası uygulama kodunu, `.env` değerlerini veya yönetici parolasını içermez. İletişim mesajları kişisel veri içerebileceğinden arşivi şifreli ve erişimi sınırlı bir yerde saklayın.
+
+Admin ZIP yedeği uygulama verisini taşımak ve elle geri yüklemek içindir. Coolify instance ve volume yedekleriyle birlikte kullanılmalı, onların yerine geçmemelidir.
+
+## Davranış ve Sınırlar
+
+- İletişim formu e-posta göndermez; mesajları `storage/state/messages.json` içinde admin paneli için saklar.
+- Normal HTTP isteklerinin toplam üst sınırı 5 MB'tır. Görsel yüklemelerinde PNG, JPG, JPEG, WEBP ve GIF desteklenir.
+- `/healthz`, storage ve temel JSON şeması hazırsa `204`, kullanılamıyorsa `503` döndürür.
+- Dosya tabanlı read-modify-write modeli genel bir dağıtık kilit kullanmadığından worker, thread ve replica sayısı artırılmamalıdır.
+- Yönetim girişi ve iletişim formu için uygulama içi rate limit yoktur; üretimde reverse proxy veya Cloudflare kuralı kullanılmalıdır.
+
 ## Test
 
 ```bash
 python -m pytest -q
 ```
+
+Mevcut test paketi kimlik doğrulama, CSRF, içerik yönetimi, medya doğrulama, seed başlatma ve güvenli yedek geri yükleme senaryolarını kapsar.
 
 ## Üretim
 
@@ -110,14 +168,19 @@ Coolify üretim özeti:
 | Replica | `1` |
 | Ortam değişkenleri | Yalnız üç zorunlu secret |
 
+Yeni sürüm yayınlamadan önce admin panelinden uygulama yedeği veya Coolify üzerinden volume yedeği alın. `main` branch'ini gönderdikten sonra Coolify'da `Deploy` çalıştırın; ayrıntılı doğrulama ve rollback adımları deployment rehberindedir.
+
 ## Proje Yapısı
 
 ```text
 app/                  Flask uygulaması
+app/backup.py         ZIP yedekleme ve güvenli geri yükleme
 seed/                 İlk kurulum içeriği
 storage/              Çalışma zamanı verisi, Git dışında
 tests/                Pytest testleri
 docs/deployment.md    Üretim kurulum rehberi
+.env.example          Ortam değişkeni şablonu
+.dockerignore         Docker build context dışlamaları
 Dockerfile            Üretim image tanımı
 compose.yaml          Yerel container doğrulaması
 run.py                Geliştirme giriş noktası

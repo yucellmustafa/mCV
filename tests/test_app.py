@@ -1,4 +1,5 @@
 import json
+import shutil
 import zipfile
 from datetime import date
 from io import BytesIO
@@ -97,6 +98,21 @@ def test_markerless_storage_does_not_overwrite_existing_files(tmp_path):
     create_app(config)
     assert post_path.read_text(encoding="utf-8") == "özel içerik\n"
     assert profile_path.read_bytes() == b"custom-profile"
+
+
+def test_first_start_copies_seed_uploads(tmp_path):
+    seed_root = tmp_path / "seed"
+    shutil.copytree(PROJECT_ROOT / "seed", seed_root)
+    seed_uploads = seed_root / "uploads"
+    seed_uploads.mkdir(exist_ok=True)
+    (seed_uploads / "project.png").write_bytes(b"seed-image")
+    storage_root = tmp_path / "storage"
+    config = make_test_config(storage_root)
+    config["SEED_ROOT"] = seed_root
+
+    create_app(config)
+
+    assert (storage_root / "uploads" / "project.png").read_bytes() == b"seed-image"
 
 
 def test_corrupt_json_stops_startup(tmp_path):

@@ -210,7 +210,7 @@ def backup():
 @bp.get("/yedekleme/indir")
 @admin_required
 def backup_download():
-    archive = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
+    archive = tempfile.TemporaryFile(dir=current_app.config["STORAGE_ROOT"])
     try:
         create_backup(current_app.config["STORAGE_ROOT"], archive)
     except BackupError as error:

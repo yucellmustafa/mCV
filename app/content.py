@@ -94,6 +94,7 @@ def initialize_storage(storage_root, seed_root):
         if not messages_path.exists():
             _atomic_write_text(messages_path, "[]\n")
         _copy_missing_tree(seed_root / "blog", blog_dir)
+        _copy_missing_tree(seed_root / "uploads", upload_dir)
         _copy_missing_tree(seed_root / "branding", branding_dir)
 
     required_files = (

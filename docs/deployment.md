@@ -146,12 +146,20 @@ Application ayarları:
 | Dockerfile Location | `/Dockerfile` |
 | Ports Exposes | `8000` |
 | Port Mappings | Boş |
-| Healthcheck path | `/healthz` |
+| Healthcheck | Dockerfile içindeki `/healthz` kontrolü |
 | Replica | `1` |
 | Stop Grace Period | `70` saniye |
 | Consistent Container Names | Açık |
 
-`Consistent Container Names`, dosya tabanlı storage kullanan eski ve yeni container'ların rolling deployment sırasında aynı anda çalışmasını engeller. Bu uygulamada kapatılmamalıdır.
+Dockerfile image'ı 30 saniye aralıklı, 5 saniye timeout, 15 saniye başlangıç süresi ve 3 tekrar kullanan bir `/healthz` kontrolü içerir. Coolify Dockerfile'daki `HEALTHCHECK` tanımını algılar; panelde ikinci ve farklı bir kontrol tanımlama.
+
+`Consistent Container Names`, dosya tabanlı storage kullanan eski ve yeni container'ların aynı anda çalışmasını engeller. Bunun sonucu deployment'ın rolling değil stop-first olması ve kısa bir planlı kesinti yaratmasıdır. Yeni container başlamazsa eski container otomatik trafik vermeye devam etmez; manuel image rollback gerekir. Veri bütünlüğü için bu ayarı kapatma ve deployment'ı düşük trafikli bir bakım aralığında yap.
+
+### Container güvenlik farkları
+
+Coolify bu projeyi Dockerfile application olarak çalıştırır; `compose.yaml` production kaynağı değildir. Bu nedenle Compose içindeki `read_only`, `init`, capability düşürme, `no-new-privileges`, tmpfs ve log rotation ayarları Coolify'a otomatik taşınmaz. Dockerfile yine non-root `10001:10001` kullanıcısını ve tek worker/thread davranışını uygular.
+
+Coolify sürümünün `Custom Docker Options` alanında desteklendiğini doğrulayarak en az `--init`, `--cap-drop=ALL` ve `--security-opt=no-new-privileges` seçeneklerini uygula. Read-only root filesystem kullanıyorsan `/tmp` için en az 320 MB yazılabilir tmpfs tanımla ve `/app/storage` volume'unun yazılabilir kaldığını doğrula. Her değişiklikten sonra image işleme, yedek indirme ve yedek geri yükleme akışlarını staging ortamında test et.
 
 ## 7. Uygulama Secret'ları
 
@@ -201,7 +209,7 @@ Volume ilk açılışta `seed/` içeriğiyle hazırlanır:
 /app/storage/branding    Profil görseli ve favicon
 ```
 
-Başlatma işareti oluşturulduktan sonra yeni deployment seed içeriğini production verisinin üzerine yazmaz.
+İlk başlatmada `seed/site.json`, blog yazıları, seed upload'ları ve marka görselleri yalnız eksik hedeflere kopyalanır; mesaj listesi boş oluşturulur. Başlatma işareti oluşturulduktan sonra yeni deployment seed içeriğini production verisinin üzerine yazmaz veya yeni seed dosyalarını volume'a birleştirmez. Mevcut kurulumlara içerik aktarmak için yönetim panelini ya da kontrollü bir yedek/geri yükleme işlemini kullan.
 
 Preview deployment açılacaksa production volume'unu ve production secret'larını paylaşma.
 
@@ -218,10 +226,11 @@ Buradaki `:8000` public port değildir; Coolify proxy'nin container içinde bağ
 İlk deployment'ı başlat ve loglarda şu aşamaları doğrula:
 
 - Docker image başarıyla oluşturuldu.
-- Storage ilk kez hazırlandı.
 - Gunicorn `0.0.0.0:8000` üzerinde başladı.
 - Container healthcheck healthy oldu.
 - Domain geçerli Let's Encrypt sertifikasıyla açıldı.
+
+Uygulama storage initialization için ayrı bir başarı logu üretmez. İlk deployment sonrasında Coolify terminalinden `/app/storage/.initialized`, `state/site.json`, `state/messages.json`, `branding/profile.png` ve `branding/favicon.png` dosyalarının varlığını; `uploads` dizininin yazılabilir olduğunu doğrula.
 
 Ardından Cloudflare'daki `@` ve `www` kayıtlarını Proxied yap. Coolify'da `www` adresini ana domaine yönlendir.
 
@@ -248,6 +257,9 @@ Fonksiyonel kontrol:
 5. Kaydedilen içeriğin kaldığını doğrula.
 6. İletişim formundan test mesajı gönder.
 7. Mesajın yönetim panelinde göründüğünü doğrula.
+8. `/admin/yedekleme` üzerinden bir uygulama yedeği indir ve ZIP'in açılabildiğini doğrula.
+
+Production'a doğrulama kaydı eklediysen işlem sonunda test yazısını, görseli ve mesajı temizle.
 
 Oracle port kontrolünde `8000`, `6001` ve `6002` dışarıdan kapalı olmalıdır.
 
@@ -260,10 +272,41 @@ Minimum öneriler:
 - `/admin/*` ve dinamik HTML üzerinde Cache Everything kullanma.
 - `/media/branding/*` için cache bypass veya düşük TTL kullan.
 - `/media/*` için Cache Everything kullanma; uygulama silinen dosyaların edge cache'te kalmaması için yeniden doğrulama ister.
+- Uygulama içinde login veya iletişim formu rate limit'i olmadığından ilk iki kuralı isteğe bağlı değil, üretim güvenlik kontrolü olarak değerlendir.
+- Container portunu yalnız Coolify proxy ağına açık tut. Uygulama bir proxy katmanından gelen `X-Forwarded-Proto` değerine güvenir.
+- HSTS, frame koruması, Referrer-Policy ve gerekiyorsa CSP başlıklarını Coolify proxy veya Cloudflare katmanında tanımla ve önce staging ortamında doğrula.
 
 Profil ve favicon sabit isimle güncellendiği için değişiklik sonrasında Cloudflare cache purge gerekebilir.
 
 ## 12. Yedekleme
+
+İki tamamlayıcı yedek katmanı kullan:
+
+| Yedek | Temel amaç | Kapsam | Kapsamadığı |
+|---|---|---|---|
+| Admin mCV ZIP | Taşınabilir uygulama verisi | Site, mesaj, blog, upload ve branding | Kod, secret, Coolify ayarları |
+| `mcv-storage` volume | Uygulama felaket kurtarma | `/app/storage` içeriğinin tamamı | Image, environment, Coolify veritabanı |
+| Coolify instance | Kontrol düzlemi kurtarma | Coolify veritabanı ve resource ayarları | Uygulama volume'u ve `/data/coolify/source/.env` |
+
+### Uygulama içi taşınabilir yedek
+
+`/admin/yedekleme` sayfasından indirilen sürümlü ZIP şunları içerir:
+
+- Site ayarları ve iletişim mesajları
+- Markdown blog yazıları
+- Yüklenen görseller
+- Profil görseli ve favicon
+- Dosya boyutu ve SHA-256 sağlama toplamlarını içeren manifest
+
+ZIP uygulama kodunu, Coolify ayarlarını, `.env` secret'larını veya yönetici parolasını içermez. Arşiv şifrelenmez ve iletişim mesajları kişisel veri içerebilir; indirdikten sonra şifreli ve erişimi sınırlı bir konumda sakla.
+
+Geri yükleme mevcut dört veri dizinini yedekteki içerikle tamamen değiştirir. Yönetici parolası yeniden istenir; arşiv yolu, türü, dosya sayısı, boyutu ve sağlama toplamları canlı veri değiştirilmeden önce doğrulanır. Varsayılan sınırlar 256 MB yüklenen ZIP, 512 MB açılmış veri ve 5.000 dosyadır. İşlem sırasında mevcut veri ile staging kopyası aynı volume'da bulunduğu için volume üzerinde yedek boyutunun en az iki katı kadar güvenli boş alan bırak.
+
+Yedek oluşturma ve geri yükleme tek senkron worker üzerinde çalışır; büyük arşivlerde diğer istekler işlem tamamlanana kadar bekleyebilir. Bu işlemleri düşük trafik zamanında yap, sekmeyi kapatma ve tamamlandıktan sonra uygulama loglarını kontrol et.
+
+Uygulama ZIP'i sürümler arası içerik taşıma ve hızlı elle kurtarma içindir. Altyapı arızası, hatalı volume veya Coolify kaybı için aşağıdaki bağımsız yedeklerin yerine geçmez.
+
+### Coolify ve volume yedeği
 
 Cloudflare R2 üzerinde private bir `coolify-backups` bucket oluştur. Yalnız bu bucket için Object Read & Write yetkili R2 token üret.
 
@@ -288,11 +331,45 @@ Volume backup ayarında `Stop containers while creating the archive` seçeneğin
 
 Coolify instance backup uygulama volume'unu ve `/data/coolify/source/.env` dosyasını içermez. Bu dosya şifreli olarak ayrıca yedeklenmeli, `APP_KEY` de parola yöneticisinde tutulmalıdır.
 
-En az bir volume arşivini ayrı bir test resource'una elle geri yükleyerek doğrula. İndirilmemiş ve geri yüklenmemiş backup doğrulanmış sayılmaz.
+En az bir volume arşivini ayrı bir test resource'una elle geri yükleyerek doğrula. Aynı ortamda uygulama ZIP geri yüklemesini de test et; üretim volume'unu ve secret'larını test resource'uyla paylaşma. İndirilmemiş ve geri yüklenmemiş backup doğrulanmış sayılmaz.
+
+### Volume geri yükleme runbook'u
+
+1. Coolify'da uygulamayı durdur; restore boyunca volume'a yazan container bırakma.
+2. Resource ayarından `/app/storage` mount'una bağlı gerçek Docker volume adını kaydet. Görünen kaynak adı Coolify tarafından prefix almış olabilir; tahmin etme.
+3. Mevcut volume'un restore öncesi güvenlik arşivini al ve farklı bir konumda sakla.
+4. Geri yüklenecek arşivin kök seviyesini doğrula; hedefte doğrudan `.initialized`, `state`, `blog`, `uploads` ve `branding` bulunmalıdır.
+5. Önce ayrı bir test volume'una geri yükle. Dosya sahipliğini runtime kullanıcısı `10001:10001` ile uyumlu hale getir.
+6. `state/site.json`, `state/messages.json`, `branding/profile.png` ve `branding/favicon.png` dosyalarını doğrula.
+7. Test resource'unu ayrı secret'larla başlat; `/healthz`, admin girişi, blog ve medya erişimini kontrol et.
+8. Aynı doğrulanmış prosedürü production volume'una uygula, uygulamayı başlat ve yayın kontrol listesini çalıştır.
+9. Eski volume veya güvenlik arşivini yalnız doğrulama ve belirlenen saklama süresi tamamlandıktan sonra kaldır.
+
+Coolify sürümüne göre volume arşivi geri yükleme arayüzü değişebilir. Dashboard otomatik restore sunmuyorsa arşivi sunucuda kontrollü olarak aç; çalışan container'ın dosyalarının üzerine doğrudan yazma.
 
 ## 13. Güncelleme ve Bakım
 
-- İlk başarılı yayından sonra Auto Deploy'u aç.
+### Uygulama güncelleme akışı
+
+1. Değişiklikleri yerelde `python -m pytest -q` ile doğrula.
+2. Yönetim panelinden güncel uygulama ZIP'ini indir. Veri modeli veya storage davranışı değişiyorsa container'ı durduran bir `mcv-storage` volume yedeği de al.
+3. Önceki çalışan image'ın `Configuration -> Rollback` listesinde bulunduğunu ve aktif başka deploy/restore işlemi olmadığını doğrula.
+4. Değişiklikleri `main` branch'ine gönder. Auto Deploy kapalıysa Coolify uygulamasında `Deploy` çalıştır.
+5. Stop-first kesinti boyunca build ve başlangıç loglarını izle; yeni container healthy olmadan işlemi başarılı kabul etme.
+6. Beklenen commit/image'ın çalıştığını, `/healthz`, ana sayfa, blog, `/admin/giris`, mevcut bir medya URL'si ve yedek indirmeyi doğrula.
+7. Admin panelinde daha önce kaydedilmiş içeriğin, mesajların ve görsellerin kaldığını ve loglarda yeni exception bulunmadığını kontrol et.
+
+Yeni image içindeki `seed/` değişikliklerinin mevcut volume'a otomatik uygulanmadığını unutma. İçerik değişikliklerini kod deployment'ı üzerinden production verisine taşımaya çalışma.
+
+### Geri dönüş
+
+Coolify `Configuration -> Rollback` bölümünden önceki çalışan image'ı seçip deploy et. Image rollback yalnız uygulama kodunu geri alır; persistent volume'u, ortam değişkenlerini veya dış servisleri eski haline getirmez.
+
+Güncelleme kalıcı veriyi değiştirdiyse ya da hatalı bir geri yükleme yapıldıysa uygulamayı durdur ve aynı yayın noktasında alınmış `mcv-storage` yedeğini ayrıca geri yükle. Kod ile veri yedeğinin birbiriyle uyumlu olduğundan emin ol. Geri dönüşten sonra sağlık, admin girişi, blog ve medya kontrollerini yeniden çalıştır.
+
+### Sürekli bakım
+
+- İlk başarılı ve doğrulanmış yayından sonra Auto Deploy'u aç.
 - Deployment ve backup failure bildirimlerini Telegram veya e-posta ile gönder.
 - Coolify güncellemeden önce instance backup al.
 - Docker Cleanup eşiğini yüzde 80 kullan.
@@ -301,6 +378,10 @@ En az bir volume arşivini ayrı bir test resource'una elle geri yükleyerek do�
 - Production veritabanlarını ve yönetim portlarını internete açma.
 
 Dosya tabanlı storage ile worker, thread veya replica sayısını artırma. Daha yüksek paralellik gerektiğinde veriyi PostgreSQL gibi transaction destekli bir sisteme taşı.
+
+### Coolify kontrol düzlemi bakımı
+
+Coolify güncellemesi mCV application deployment'ından ayrıdır. Güncellemeden önce instance backup'ın güncel olduğunu, `/data/coolify/source/.env` ve `APP_KEY` kopyalarının erişilebilir olduğunu doğrula; release notlarını incele ve aktif application deployment olmadığından emin ol. Güncellemeden sonra beklenen Coolify sürümünü, proxy'yi, sunucu bağlantısını ve tüm resource durumlarını kontrol et. Coolify downgrade uygulama image'ını veya `mcv-storage` verisini geri almaz.
 
 ## Sorun Giderme
 
@@ -315,6 +396,9 @@ Dosya tabanlı storage ile worker, thread veya replica sayısını artırma. Dah
 | İçerik deployment sonrası kayboluyor | `/app/storage` Volume Mount bağlantısını kontrol et |
 | Admin login kalıcı olmuyor | Siteye HTTPS üzerinden erişildiğini kontrol et |
 | Profil veya favicon eski | Cloudflare cache'ini temizle |
+| Yedek indirilemiyor | `/app/storage` boş alanını ve container loglarını kontrol et |
+| Geri yükleme reddediliyor | ZIP'in mCV manifestini, 256 MB istek sınırını ve yönetici parolasını kontrol et |
+| Geri yükleme sırasında alan hatası | Volume'da mevcut veri ve staging kopyası için yeterli boş alan aç |
 | ARM64 build hatası | Bağımlı image veya paketin `linux/arm64` desteğini kontrol et |
 
 ## Resmi Kaynaklar
@@ -323,6 +407,7 @@ Dosya tabanlı storage ile worker, thread veya replica sayısını artırma. Dah
 - [Coolify Dockerfile deployment](https://coolify.io/docs/applications/builds/dockerfile)
 - [Coolify persistent storage](https://coolify.io/docs/applications/configuration/persistent-storage)
 - [Coolify rolling updates](https://coolify.io/docs/applications/deployments/rolling-updates)
+- [Coolify rollbacks](https://coolify.io/docs/applications/deployments/rollbacks)
 - [Coolify firewall](https://coolify.io/docs/core/infrastructure/servers/firewall)
 - [Cloudflare Full strict](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/)
 - [Oracle network security rules](https://docs.oracle.com/en-us/iaas/Content/Network/Concepts/securityrules.htm)
