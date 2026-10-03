@@ -2,7 +2,7 @@ import os
 import secrets
 from pathlib import Path
 
-from flask import Flask, abort, request, session
+from flask import Flask, abort, flash, redirect, request, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .content import ContentRepository, initialize_storage
@@ -23,6 +23,9 @@ def create_app(test_config=None):
         STORAGE_ROOT=root / "storage",
         SEED_ROOT=root / "seed",
         MAX_CONTENT_LENGTH=5 * 1024 * 1024,
+        BACKUP_MAX_CONTENT_LENGTH=256 * 1024 * 1024,
+        BACKUP_MAX_UNCOMPRESSED_SIZE=512 * 1024 * 1024,
+        BACKUP_MAX_FILES=5000,
         UPLOAD_EXTENSIONS={"png", "jpg", "jpeg", "webp", "gif"},
     )
     if test_config is not None:
@@ -65,6 +68,8 @@ def create_app(test_config=None):
 
     @app.before_request
     def csrf_protect():
+        if request.endpoint == "admin.backup_restore":
+            request.max_content_length = app.config["BACKUP_MAX_CONTENT_LENGTH"]
         if request.endpoint in {"healthz", "static", "main.uploaded_media", "main.branding_media"}:
             return None
         if "csrf_token" not in session:
@@ -73,6 +78,13 @@ def create_app(test_config=None):
             token = request.form.get("csrf_token", "")
             if not secrets.compare_digest(token, session["csrf_token"]):
                 abort(400, "Geçersiz form anahtarı. Sayfayı yenileyip tekrar deneyin.")
+
+    @app.errorhandler(413)
+    def backup_too_large(error):
+        if request.endpoint == "admin.backup_restore":
+            flash("Yedek dosyası izin verilen boyut sınırını aşıyor.", "error")
+            return redirect(url_for("admin.backup"))
+        return error
 
     @app.context_processor
     def inject_globals():

@@ -1,4 +1,5 @@
 import json
+import zipfile
 from datetime import date
 from io import BytesIO
 from pathlib import Path
@@ -138,6 +139,175 @@ def login(client):
         data={"username": "test-admin", "password": "test-password", "csrf_token": csrf(client)},
         follow_redirects=True,
     )
+
+
+def test_backup_routes_require_login(client):
+    for path in ("/admin/yedekleme", "/admin/yedekleme/indir"):
+        response = client.get(path)
+        assert response.status_code == 302
+        assert "/admin/giris" in response.headers["Location"]
+
+
+def test_admin_can_download_complete_backup(client):
+    login(client)
+    response = client.get("/admin/yedekleme/indir")
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/zip"
+    assert response.headers["Content-Disposition"].startswith("attachment; filename=mcv-yedek-")
+    with zipfile.ZipFile(BytesIO(response.data)) as archive:
+        names = set(archive.namelist())
+        manifest = json.loads(archive.read("manifest.json"))
+
+    assert manifest["format"] == "mcv-backup"
+    assert manifest["version"] == 1
+    assert {"state/site.json", "state/messages.json", "branding/profile.png", "branding/favicon.png"} <= names
+    assert {entry["path"] for entry in manifest["files"]} == names - {"manifest.json"}
+
+
+def test_admin_can_restore_backup_and_remove_newer_files(client, app):
+    login(client)
+    backup_data = client.get("/admin/yedekleme/indir").data
+    repository = app.extensions["content"]
+    original_name = repository.get_site()["profile"]["name"]
+    changed_site = repository.get_site()
+    changed_site["profile"]["name"] = "Değiştirilen ad"
+    repository.save_site(changed_site)
+    extra_post = app.config["STORAGE_ROOT"] / "blog" / "yedekten-sonra.md"
+    extra_post.write_text("sonradan eklendi", encoding="utf-8")
+
+    response = client.post(
+        "/admin/yedekleme/geri-yukle",
+        data={
+            "csrf_token": csrf(client),
+            "password": "test-password",
+            "backup": (BytesIO(backup_data), "mcv-yedek.zip"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "tüm site verileri başarıyla geri yüklendi" in response.text
+    assert repository.get_site()["profile"]["name"] == original_name
+    assert not extra_post.exists()
+
+
+def test_restore_rejects_corrupt_backup_without_changing_storage(client, app):
+    login(client)
+    repository = app.extensions["content"]
+    original_site = repository.get_site()
+
+    response = client.post(
+        "/admin/yedekleme/geri-yukle",
+        data={
+            "csrf_token": csrf(client),
+            "password": "test-password",
+            "backup": (BytesIO(b"not-a-zip"), "bozuk.zip"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "geçerli bir mCV yedeği değil" in response.text
+    assert repository.get_site() == original_site
+
+
+def test_restore_rejects_path_traversal(client, app):
+    login(client)
+    archive_data = BytesIO()
+    manifest = {
+        "format": "mcv-backup",
+        "version": 1,
+        "created_at": "2026-10-03T20:00:00+00:00",
+        "files": [{"path": "../outside.txt", "size": 4, "sha256": "0" * 64}],
+    }
+    with zipfile.ZipFile(archive_data, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(manifest))
+        archive.writestr("../outside.txt", "evil")
+    archive_data.seek(0)
+
+    response = client.post(
+        "/admin/yedekleme/geri-yukle",
+        data={
+            "csrf_token": csrf(client),
+            "password": "test-password",
+            "backup": (archive_data, "tehlikeli.zip"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "geçersiz bir dosya yolu" in response.text
+    assert not (app.config["STORAGE_ROOT"].parent / "outside.txt").exists()
+
+
+def test_restore_requires_current_admin_password(client, app):
+    login(client)
+    backup_data = client.get("/admin/yedekleme/indir").data
+    original_site = app.extensions["content"].get_site()
+
+    response = client.post(
+        "/admin/yedekleme/geri-yukle",
+        data={
+            "csrf_token": csrf(client),
+            "password": "wrong-password",
+            "backup": (BytesIO(backup_data), "mcv-yedek.zip"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert "Yönetici parolası doğrulanamadı" in response.text
+    assert app.extensions["content"].get_site() == original_site
+
+
+def test_restore_rejects_tampered_backup(client, app):
+    login(client)
+    downloaded = client.get("/admin/yedekleme/indir").data
+    tampered = BytesIO()
+    with zipfile.ZipFile(BytesIO(downloaded)) as source, zipfile.ZipFile(tampered, "w") as target:
+        for info in source.infolist():
+            data = source.read(info)
+            if info.filename == "state/site.json":
+                data += b" "
+            target.writestr(info.filename, data)
+    tampered.seek(0)
+    original_site = app.extensions["content"].get_site()
+
+    response = client.post(
+        "/admin/yedekleme/geri-yukle",
+        data={
+            "csrf_token": csrf(client),
+            "password": "test-password",
+            "backup": (tampered, "degistirilmis.zip"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert "dosya boyutu eşleşmiyor" in response.text
+    assert app.extensions["content"].get_site() == original_site
+
+
+def test_restore_uses_separate_request_size_limit(client, app):
+    login(client)
+    app.config["BACKUP_MAX_CONTENT_LENGTH"] = 128
+    response = client.post(
+        "/admin/yedekleme/geri-yukle",
+        data={
+            "csrf_token": csrf(client),
+            "password": "test-password",
+            "backup": (BytesIO(b"x" * 1024), "buyuk.zip"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "izin verilen boyut sınırını aşıyor" in response.text
 
 
 def test_admin_login_rejects_wrong_username(client):
@@ -511,7 +681,7 @@ def test_admin_can_create_markdown_post(client, app):
     assert response.status_code == 200
     path = app.config["STORAGE_ROOT"] / "blog" / "test-yazisi.md"
     assert path.exists()
-    assert "Markdown gövdesi" in path.read_text()
+    assert "Markdown gövdesi" in path.read_text(encoding="utf-8")
     post = app.extensions["content"].get_post("test-yazisi")
     assert post["tags"] == ["Flask", "Python"]
     assert post["time"] == "18:45"

@@ -43,6 +43,8 @@
         </div>
       </details>
 
+      <a class="{{ 'is-active' if request.endpoint in ['admin.backup', 'admin.backup_download', 'admin.backup_restore'] }}" href="{{ url_for('admin.backup') }}"><i data-lucide="database-backup"></i> Yedekleme</a>
+
     </nav>
     <div class="admin-sidebar__bottom">
       <a class="admin-sidebar__messages {{ 'is-active' if request.endpoint in ['admin.messages', 'admin.message_read', 'admin.message_delete'] }}" href="{{ url_for('admin.messages') }}"><i data-lucide="inbox"></i><span>Gelen mesajlar</span>{% if unread_message_count %}<strong class="message-badge" aria-label="{{ unread_message_count }} okunmamış mesaj">{{ '99+' if unread_message_count > 99 else unread_message_count }}</strong>{% endif %}</a>

@@ -1,5 +1,6 @@
 import hmac
 import os
+import tempfile
 from datetime import date, datetime
 from functools import wraps
 from pathlib import Path
@@ -13,12 +14,14 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     session,
     url_for,
 )
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from ..backup import BackupError, create_backup, restore_backup
 from ..content import LOCAL_UPLOAD_PATTERN
 from . import bp
 
@@ -196,6 +199,61 @@ def dashboard():
         posts=posts,
         messages=messages,
     )
+
+
+@bp.get("/yedekleme")
+@admin_required
+def backup():
+    return render_template("admin/backup.html")
+
+
+@bp.get("/yedekleme/indir")
+@admin_required
+def backup_download():
+    archive = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
+    try:
+        create_backup(current_app.config["STORAGE_ROOT"], archive)
+    except BackupError as error:
+        archive.close()
+        flash(str(error), "error")
+        return redirect(url_for("admin.backup"))
+    filename = f"mcv-yedek-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+        max_age=0,
+    )
+
+
+@bp.post("/yedekleme/geri-yukle")
+@admin_required
+def backup_restore():
+    archive = request.files.get("backup")
+    if not archive or not archive.filename:
+        flash("Geri yüklenecek ZIP dosyasını seçin.", "error")
+        return redirect(url_for("admin.backup"))
+    if Path(archive.filename).suffix.lower() != ".zip":
+        flash("Yalnızca mCV ZIP yedekleri geri yüklenebilir.", "error")
+        return redirect(url_for("admin.backup"))
+    if not password_matches(request.form.get("password", "")):
+        flash("Yönetici parolası doğrulanamadı.", "error")
+        return redirect(url_for("admin.backup"))
+
+    try:
+        restore_backup(
+            current_app.config["STORAGE_ROOT"],
+            archive.stream,
+            max_files=current_app.config["BACKUP_MAX_FILES"],
+            max_uncompressed_size=current_app.config["BACKUP_MAX_UNCOMPRESSED_SIZE"],
+        )
+    except BackupError as error:
+        flash(str(error), "error")
+        return redirect(url_for("admin.backup"))
+
+    flash("Yedek doğrulandı ve tüm site verileri başarıyla geri yüklendi.", "success")
+    return redirect(url_for("admin.backup"))
 
 
 @bp.route("/profil", methods=["GET", "POST"])
