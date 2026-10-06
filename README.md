@@ -119,7 +119,7 @@ storage/
 └── branding/    Profil görseli ve favicon
 ```
 
-Docker ve Coolify yalnız `/app/storage` yolunu kalıcı volume olarak bağlar. Dosya tabanlı veri modeli nedeniyle uygulama tek worker, tek thread ve tek replica ile çalışır.
+Yerel Compose ve Dokploy üretim kurulumu kalıcı veriyi `/app/storage` yolundaki named volume'da tutar. Dosya tabanlı veri modeli nedeniyle uygulama tek worker, tek thread, tek replica ve `stop-first` deployment ile çalışır.
 
 ## Yedekleme ve Geri Yükleme
 
@@ -135,7 +135,7 @@ Geri yükleme arşiv yollarını, dosya türlerini, dosya sayısını, açılmı
 
 Geri yükleme, mevcut `state`, `blog`, `uploads` ve `branding` içeriğini yedekteki sürümle tamamen değiştirir. İşlemden önce güncel bir yedek indirin. ZIP dosyası uygulama kodunu, `.env` değerlerini veya yönetici parolasını içermez. İletişim mesajları kişisel veri içerebileceğinden arşivi şifreli ve erişimi sınırlı bir yerde saklayın.
 
-Admin ZIP yedeği uygulama verisini taşımak ve elle geri yüklemek içindir. Coolify instance ve volume yedekleriyle birlikte kullanılmalı, onların yerine geçmemelidir.
+Admin ZIP yedeği uygulama verisini taşımak ve elle geri yüklemek içindir. Dokploy control-plane ve named volume yedekleriyle birlikte kullanılmalı, onların yerine geçmemelidir.
 
 ## Davranış ve Sınırlar
 
@@ -155,20 +155,22 @@ Mevcut test paketi kimlik doğrulama, CSRF, içerik yönetimi, medya doğrulama,
 
 ## Üretim
 
-Oracle Cloud, Coolify ve Cloudflare için eksiksiz kurulum: [docs/deployment.md](docs/deployment.md).
+Oracle Cloud, Dokploy ve Cloudflare için eksiksiz kurulum ve Coolify'dan geçiş: [docs/deployment.md](docs/deployment.md).
 
-Coolify üretim özeti:
+Dokploy üretim özeti:
 
 | Ayar | Değer |
 |---|---|
-| Build Pack | Dockerfile |
-| Container portu | `8000` |
-| Healthcheck | `/healthz` |
-| Kalıcı volume | `/app/storage` |
+| Service tipi | Application |
+| Build Type | Dockerfile |
+| Domain Container Port | `8000` |
+| Healthcheck | `/healthz` (`204`) |
+| Named volume | `mcv-storage:/app/storage` |
 | Replica | `1` |
+| Update order | `stop-first` |
 | Ortam değişkenleri | Yalnız üç zorunlu secret |
 
-Yeni sürüm yayınlamadan önce admin panelinden uygulama yedeği veya Coolify üzerinden volume yedeği alın. `main` branch'ini gönderdikten sonra Coolify'da `Deploy` çalıştırın; ayrıntılı doğrulama ve rollback adımları deployment rehberindedir.
+Yeni sürüm yayınlamadan önce admin panelinden uygulama yedeği ve Dokploy üzerinden named volume yedeği alın. `main` branch'ini gönderdikten sonra Dokploy deployment loglarını ve `/healthz` sonucunu doğrulayın; güvenli update ve rollback adımları deployment rehberindedir.
 
 ## Proje Yapısı
 

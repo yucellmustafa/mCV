@@ -50,7 +50,7 @@ def create_app(test_config=None):
     )
     initialize_storage(storage_root, app.config["SEED_ROOT"])
 
-    # Only the Coolify reverse proxy can reach the production container port.
+    # Only the trusted production reverse proxy can reach the container port.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1)
     app.extensions["content"] = ContentRepository(storage_root)
 

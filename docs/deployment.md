@@ -1,6 +1,6 @@
-# Oracle Cloud Üretim Kurulumu
+# Oracle Cloud ve Dokploy Üretim Kurulumu
 
-Bu belge mCV uygulamasının Oracle Cloud üzerinde Coolify ile çalıştırılması ve Cloudflare üzerinden yayınlanması için tek üretim prosedürüdür.
+Bu belge mCV uygulamasının Oracle Cloud üzerinde Dokploy ile çalıştırılması ve Cloudflare üzerinden yayınlanması için üretim prosedürüdür.
 
 ## Hedef Mimari
 
@@ -8,14 +8,26 @@ Bu belge mCV uygulamasının Oracle Cloud üzerinde Coolify ile çalıştırılm
 Internet
   -> Cloudflare DNS/CDN
   -> Oracle Cloud NSG :80/:443
-  -> Coolify Proxy
-  -> mCV container :8000
-  -> mcv-storage volume /app/storage
+  -> Dokploy Traefik
+  -> mCV Application container :8000
+  -> Docker named volume mcv-storage :/app/storage
 ```
 
-Coolify Docker kurulumu, reverse proxy, sertifika, deployment, log ve yedekleme işlemlerini tek panelden yönetir. Uygulama portu internete doğrudan açılmaz.
+Uygulama dosya tabanlı kalıcı veri kullanır. Bu nedenle üretimde her zaman tek worker, tek thread, tek replica ve `stop-first` deployment kullanılmalıdır. Uygulama portu host üzerinde yayınlanmaz; yalnız Dokploy Traefik üzerinden erişilir.
 
-## 1. Sunucu Seçimi
+## 1. Geçiş Öncesi Yedek
+
+Mevcut Coolify kurulumunu kapatmadan önce:
+
+1. `/admin/yedekleme` sayfasından güncel mCV ZIP yedeğini indir.
+2. Mevcut `/app/storage` volume'unun ayrıca altyapı yedeğini al.
+3. `SECRET_KEY`, `ADMIN_USERNAME` ve `ADMIN_PASSWORD` değerlerini parola yöneticisinde doğrula.
+4. Yedeğin açılabildiğini ve `manifest.json` içerdiğini kontrol et.
+5. DNS TTL değerini planlanan geçişten önce düşür.
+
+En güvenli geçiş yeni bir sunucuya Dokploy kurup veriyi admin ZIP ile taşımak ve doğrulamadan sonra DNS'i değiştirmektir. Coolify ve Dokploy aynı sunucuda aynı anda `80/443` portlarını kullanamaz. Aynı sunucu kullanılacaksa tüm yedekleri sunucu dışına aldıktan sonra Coolify proxy tamamen durdurulmalı; bu yöntem planlı kesinti gerektirir.
+
+## 2. Sunucu Gereksinimleri
 
 Önerilen başlangıç kapasitesi:
 
@@ -23,227 +35,248 @@ Coolify Docker kurulumu, reverse proxy, sertifika, deployment, log ve yedekleme 
 |---|---|
 | İşletim sistemi | Ubuntu 24.04 LTS |
 | CPU | En az 2 OCPU, tercihen 4 OCPU |
-| RAM | En az 4 GB, tercihen 8 GB veya üzeri |
-| Disk | En az 80 GB boot volume |
-| IP | Reserved Public IPv4 |
+| RAM | En az 4 GB, tercihen 8 GB |
+| Disk | En az 80 GB, yedek ve image büyümesi izlenmeli |
+| Mimari | AMD64 veya ARM64 |
+| Public IP | Reserved/static IPv4 |
 
-Oracle Ampere A1 `arm64` kullanılabilir. Resmi Python image'ı ARM64 destekler; ileride eklenecek her Docker image'ının da ARM64 desteği ayrıca doğrulanmalıdır. En geniş image uyumluluğu için AMD64 tercih edilir.
+Dokploy resmi minimumu 2 GB RAM ve 30 GB disktir. Image build işlemi de aynı sunucuda yapılacağı için üretimde daha yüksek kapasite kullanmak kilitlenme riskini azaltır.
 
-Sunucuyu public subnet içinde oluştur, SSH anahtarını indir ve public IP'yi reserved IP olarak sabitle.
+Oracle Cloud NSG ingress kuralları:
 
-## 2. Oracle Network Security Group
-
-Instance VNIC'ine özel bir Network Security Group bağla. Kurulum sırasındaki stateful ingress kuralları:
-
-| Kaynak | Protokol | Hedef port | Açıklama |
+| Kaynak | Protokol | Port | Amaç |
 |---|---|---:|---|
-| Yönetici IP adresin `/32` | TCP | 22 | SSH |
-| `0.0.0.0/0` | TCP | 80 | HTTP ve sertifika doğrulaması |
-| `0.0.0.0/0` | TCP | 443 | HTTPS |
-| Yönetici IP adresin `/32` | TCP | 8000 | Geçici Coolify panel erişimi |
-| Yönetici IP adresin `/32` | TCP | 6001 | Geçici gerçek zamanlı panel bağlantısı |
-| Yönetici IP adresin `/32` | TCP | 6002 | Geçici web terminali |
+| Yönetici IP adresi `/32` | TCP | `22` | SSH |
+| `0.0.0.0/0` | TCP | `80` | HTTP ve sertifika doğrulaması |
+| `0.0.0.0/0` | TCP | `443` | HTTPS |
+| Yönetici IP adresi `/32` | TCP | `3000` | Yalnız ilk Dokploy panel kurulumu |
 
-Yönetici public IP adresini öğrenmek için:
+`8000` portunu NSG, UFW veya Dokploy Advanced Ports üzerinden yayınlama. Tek sunuculu kurulumda Docker Swarm yönetim portlarını internete açma.
 
-```bash
-curl -4 ifconfig.me
-```
+## 3. İşletim Sistemi Güvenliği
 
-SSH portunu genel internete açma. Uygulamanın `8000` portu için ayrıca Oracle kuralı oluşturma.
-
-## 3. İşletim Sistemi ve Coolify
-
-Sunucuya bağlan:
+Sunucuya bağlan ve sistemi güncelle:
 
 ```bash
 ssh -i ~/.ssh/oracle.key ubuntu@PUBLIC_IP
-```
-
-Sistemi güncelle:
-
-```bash
 sudo apt update
 sudo apt full-upgrade -y
 sudo reboot
 ```
 
-Tekrar bağlandıktan sonra resmi Coolify kurulumunu çalıştır:
+Üretim güvenlik tabanı:
+
+- SSH anahtar doğrulaması kullan; parola girişini ve root SSH girişini kapat.
+- Oracle Ubuntu platform image'ında UFW'yi körlemesine etkinleştirme; metadata ve boot volume için gereken Oracle iptables kurallarını koru.
+- Fail2Ban veya CrowdSec etkinleştir.
+- Otomatik güvenlik güncellemelerini aç.
+- Docker'ın host firewall kurallarını değiştirebildiğini unutma; Oracle NSG'yi birincil ağ sınırı olarak kullan. Host firewall değişikliğini Oracle'ın güncel Compute talimatlarına göre test et.
+- Docker socket'i TCP üzerinden hiçbir zaman yayınlama.
+- Docker log rotation ve disk kullanım alarmı yapılandır.
+
+## 4. Dokploy Kurulumu
+
+Resmi kararlı sürümü kur:
 
 ```bash
-sudo -i
-curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
+curl -sSL https://dokploy.com/install.sh | sh
 ```
 
-Kurulum Docker Engine dahil gerekli bileşenleri kurar. İşlem tamamlanınca `http://PUBLIC_IP:8000` adresini aç ve ilk yönetici hesabını hemen oluştur.
+Kurulumdan sonra `http://PUBLIC_IP:3000` adresini yalnız yönetici IP'sinden aç ve ilk hesabı hemen oluştur.
 
-İlk panel işlemleri:
+İlk güvenlik ayarları:
 
-- Güçlü ve benzersiz parola belirle.
-- İki faktörlü doğrulamayı etkinleştir.
-- Instance saat dilimini ayarla.
-- `/data/coolify/source/.env` dosyasının tamamını şifreli, sunucu dışı bir konuma yedekle.
-- Dosyadaki `APP_KEY` değerini ayrıca parola yöneticisine kaydet.
-- Coolify instance backup özelliğini etkinleştir.
+- Güçlü ve benzersiz panel parolası kullan.
+- `Settings -> Profile` altında passkey ve 2FA etkinleştir.
+- En az iki kurtarma yöntemi ve 2FA yedek kodu sakla.
+- Dokploy paneli için HTTPS domain yapılandır.
+- Dokploy control-plane backup'ını etkinleştir.
 
-## 4. Coolify Panel Domaini
+Panel domaini HTTPS üzerinden doğrulandıktan sonra doğrudan `IP:3000` yayınını kaldır:
 
-Cloudflare DNS'te önce DNS only olarak kayıt oluştur:
-
-| Tür | İsim | Hedef |
-|---|---|---|
-| A | `panel` | Oracle Reserved Public IP |
-
-Coolify içinde `Settings -> Configuration -> General -> URL` alanını ayarla:
-
-```text
-https://panel.example.com
+```bash
+docker service update --publish-rm "published=3000,target=3000,mode=host" dokploy
 ```
 
-Panel geçerli HTTPS sertifikasıyla açıldıktan sonra:
+Bu komutu yalnız panel domaini çalışırken uygula. Aksi halde panel erişimini kaybedebilirsin.
 
-- Cloudflare kaydını Proxied yap.
-- Oracle NSG'den `8000`, `6001` ve `6002` kurallarını kaldır.
-- Yalnız `22`, `80` ve `443` kurallarını bırak.
+## 5. Cloudflare ve Panel Domaini
 
-## 5. Cloudflare Temel Ayarları
+Cloudflare DNS'te panel için sunucu IP'sine bir `A` kaydı oluştur. İlk Let's Encrypt sertifikası alınırken kaydı geçici olarak **DNS only** tutmak sorun gidermeyi kolaylaştırır.
 
-Uygulama DNS kayıtlarını başlangıçta DNS only oluştur:
+Dokploy domain/certificate ayarlarında:
 
-| Tür | İsim | Hedef |
-|---|---|---|
-| A | `@` | Oracle Reserved Public IP |
-| A | `www` | Oracle Reserved Public IP |
+- Host: `panel.example.com`
+- Path: `/`
+- HTTPS: açık
+- Certificate: Let's Encrypt
 
-Cloudflare SSL/TLS ayarları:
+Panel HTTPS üzerinden açıldıktan sonra Cloudflare SSL/TLS modunu **Full (strict)** yap. Flexible kullanma. Ardından kayıt Proxied yapılabilir.
+
+## 6. GitHub Kaynağı ve Application
+
+Dokploy içinde:
+
+1. `mCV` projesi ve `production` environment oluştur.
+2. Yeni bir **Application** ekle.
+3. GitHub provider veya Git repository ile `https://github.com/yucellmustafa/mCV.git` kaynağını bağla.
+4. Branch olarak `main` seç.
+5. Build Type olarak `Dockerfile` seç.
+
+Build ayarları:
 
 | Ayar | Değer |
 |---|---|
-| Encryption mode | Full (strict) |
-| Always Use HTTPS | Açık |
-| Minimum TLS | TLS 1.2 |
-| DNS TTL | Auto |
+| Build Type | `Dockerfile` |
+| Dockerfile Path | `Dockerfile` |
+| Docker Context Path | `.` |
+| Docker Build Stage | Boş |
+| Published Ports | Boş |
+| Auto Deploy | İlk doğrulama tamamlanana kadar kapalı |
 
-Flexible SSL kullanma. HSTS'yi yalnız origin sertifikası, HTTPS ve yönlendirmeler tamamen doğrulandıktan sonra etkinleştir. IPv6 sunucu üzerinde eksiksiz çalışmıyorsa `AAAA` kaydı oluşturma.
+`compose.yaml` yalnız yerel Docker doğrulaması içindir; Dokploy production kaynağı değildir.
 
-## 6. GitHub Kaynağını Bağlama
+Bu doğrudan Dockerfile build akışı küçük uygulama için en sade başlangıçtır. Build sırasında production sunucusunda CPU/RAM baskısı görülürse image'ı GitHub Actions üzerinde oluşturup değişmez commit SHA etiketiyle GHCR'a gönder; Dokploy Source Type olarak `Docker` kullanıp hazır image'ı dağıt. `latest` etiketi yerine değişmez tag kullanmak hem tekrarlanabilir deployment hem registry tabanlı rollback sağlar.
 
-Coolify içinde:
+## 7. Ortam Değişkenleri
 
-1. `New Project` ile `mCV` projesi oluştur.
-2. `production` environment seç.
-3. `New Resource` oluştur.
-4. Repo gizliyse GitHub App, açıksa Public Repository seç.
-5. `https://github.com/yucellmustafa/mCV.git` kaynağını bağla.
-6. Branch olarak `main` seç.
-7. Build Pack olarak `Dockerfile` seç.
-
-Application ayarları:
-
-| Ayar | Değer |
-|---|---|
-| Base Directory | `/` |
-| Dockerfile Location | `/Dockerfile` |
-| Ports Exposes | `8000` |
-| Port Mappings | Boş |
-| Healthcheck | Dockerfile içindeki `/healthz` kontrolü |
-| Replica | `1` |
-| Stop Grace Period | `70` saniye |
-| Consistent Container Names | Açık |
-
-Dockerfile image'ı 30 saniye aralıklı, 5 saniye timeout, 15 saniye başlangıç süresi ve 3 tekrar kullanan bir `/healthz` kontrolü içerir. Coolify Dockerfile'daki `HEALTHCHECK` tanımını algılar; panelde ikinci ve farklı bir kontrol tanımlama.
-
-`Consistent Container Names`, dosya tabanlı storage kullanan eski ve yeni container'ların aynı anda çalışmasını engeller. Bunun sonucu deployment'ın rolling değil stop-first olması ve kısa bir planlı kesinti yaratmasıdır. Yeni container başlamazsa eski container otomatik trafik vermeye devam etmez; manuel image rollback gerekir. Veri bütünlüğü için bu ayarı kapatma ve deployment'ı düşük trafikli bir bakım aralığında yap.
-
-### Container güvenlik farkları
-
-Coolify bu projeyi Dockerfile application olarak çalıştırır; `compose.yaml` production kaynağı değildir. Bu nedenle Compose içindeki `read_only`, `init`, capability düşürme, `no-new-privileges`, tmpfs ve log rotation ayarları Coolify'a otomatik taşınmaz. Dockerfile yine non-root `10001:10001` kullanıcısını ve tek worker/thread davranışını uygular.
-
-Coolify sürümünün `Custom Docker Options` alanında desteklendiğini doğrulayarak en az `--init`, `--cap-drop=ALL` ve `--security-opt=no-new-privileges` seçeneklerini uygula. Read-only root filesystem kullanıyorsan `/tmp` için en az 320 MB yazılabilir tmpfs tanımla ve `/app/storage` volume'unun yazılabilir kaldığını doğrula. Her değişiklikten sonra image işleme, yedek indirme ve yedek geri yükleme akışlarını staging ortamında test et.
-
-## 7. Uygulama Secret'ları
-
-Secret key'i yerel bilgisayarda üret:
+Secret key'i güvenilir bir bilgisayarda üret:
 
 ```bash
 python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
-Coolify `Configuration -> Environment Variables` bölümüne yalnız şu üç değeri ekle:
+Application `Environment` bölümüne yalnız şu service-level runtime değişkenlerini ekle:
 
-| Değişken | İçerik |
+| Değişken | Kural |
 |---|---|
-| `SECRET_KEY` | Üretilen rastgele değer |
-| `ADMIN_USERNAME` | Yönetici kullanıcı adı |
-| `ADMIN_PASSWORD` | En az 20 karakterlik benzersiz parola |
+| `SECRET_KEY` | En az 32 karakter, rastgele |
+| `ADMIN_USERNAME` | Başında/sonunda boşluk yok |
+| `ADMIN_PASSWORD` | En az 20 karakter, benzersiz |
 
-Her üç değer için:
+Bu değerleri Build Time Arguments içine koyma. Mümkünse Dokploy Secrets Provider üzerinden harici bir secret yöneticisinden referansla. Preview veya staging ortamlarında production secret'larını kullanma.
 
-- Runtime Variable açık olmalı.
-- Build Variable kapalı olmalı.
-- Literal açık olmalı.
-- Değerler secret/locked olarak saklanmalı.
+`SECRET_KEY` değiştirilirse mevcut admin session cookie'leri geçersiz olur; storage verisi etkilenmez.
 
-Başka uygulama değişkeni ekleme. Port, debug, secure cookie ve Gunicorn davranışı image içinde güvenli değerlerle sabitlenmiştir.
+## 8. Kalıcı Volume
 
-Parola container ortamında düz secret olarak bulunur. Coolify erişimini sınırla, panelde 2FA kullan ve Docker socket erişimini güvenilir yöneticilerle sınırlandır.
-
-## 8. Kalıcı Storage
-
-İlk deployment öncesinde `Configuration -> Persistent Storage` bölümünde bir Volume Mount oluştur:
+İlk deployment öncesinde Application altında `Advanced -> Mounts` bölümüne **Volume Mount** ekle:
 
 | Alan | Değer |
 |---|---|
-| Volume adı | `mcv-storage` |
-| Source Path | Boş |
-| Destination Path | `/app/storage` |
+| Volume Name | `mcv-storage` |
+| Mount Path | `/app/storage` |
 
-Directory Mount veya host path kullanma. Docker tarafından yönetilen volume, image içindeki non-root `app` kullanıcısıyla uyumlu başlatılır.
+Bind mount kullanma. Dokploy Volume Backups yalnız Docker named volume destekler.
 
-Volume ilk açılışta `seed/` içeriğiyle hazırlanır:
-
-```text
-/app/storage/state       Site ayarları ve iletişim mesajları
-/app/storage/blog        Markdown blog yazıları
-/app/storage/uploads     Yüklenen görseller
-/app/storage/branding    Profil görseli ve favicon
-```
-
-İlk başlatmada `seed/site.json`, blog yazıları, seed upload'ları ve marka görselleri yalnız eksik hedeflere kopyalanır; mesaj listesi boş oluşturulur. Başlatma işareti oluşturulduktan sonra yeni deployment seed içeriğini production verisinin üzerine yazmaz veya yeni seed dosyalarını volume'a birleştirmez. Mevcut kurulumlara içerik aktarmak için yönetim panelini ya da kontrollü bir yedek/geri yükleme işlemini kullan.
-
-Preview deployment açılacaksa production volume'unu ve production secret'larını paylaşma.
-
-## 9. Domain ve İlk Deployment
-
-Coolify Domains alanına container hedef portuyla birlikte yaz:
+Volume yazılabilir olmalı ve image içindeki `10001:10001` kullanıcısıyla uyumlu olmalıdır. İlk açılışta uygulama aşağıdaki yapıyı hazırlar:
 
 ```text
-https://example.com:8000,https://www.example.com:8000
+/app/storage/
+├── .initialized
+├── state/
+│   ├── site.json
+│   └── messages.json
+├── blog/
+├── uploads/
+└── branding/
+    ├── profile.png
+    └── favicon.png
 ```
 
-Buradaki `:8000` public port değildir; Coolify proxy'nin container içinde bağlanacağı porttur. Ziyaretçiler standart HTTPS `443` portunu kullanır.
+İlk açılışta seed içeriği yalnız eksik hedeflere kopyalanır. `.initialized` oluştuktan sonra yeni image içindeki seed değişiklikleri mevcut volume'a otomatik birleştirilmez.
 
-İlk deployment'ı başlat ve loglarda şu aşamaları doğrula:
+## 9. Swarm ve Healthcheck Ayarları
+
+Application `Advanced -> Cluster Settings` altında:
+
+| Ayar | Değer |
+|---|---|
+| Mode | Replicated |
+| Replicas | `1` |
+| Global mode | Kapalı |
+
+Dockerfile zaten `/healthz` için healthcheck içerir. Dokploy Swarm Health Check alanı kullanılıyorsa aynı kontrolü tanımla; image içinde `curl` bulunmadığı için resmi örnekteki curl komutunu kullanma:
+
+```json
+{
+  "Test": [
+    "CMD",
+    "python",
+    "-c",
+    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"
+  ],
+  "Interval": 30000000000,
+  "Timeout": 5000000000,
+  "StartPeriod": 15000000000,
+  "Retries": 3
+}
+```
+
+Update Config:
+
+```json
+{
+  "Parallelism": 1,
+  "Delay": 0,
+  "FailureAction": "rollback",
+  "Monitor": 30000000000,
+  "MaxFailureRatio": 0,
+  "Order": "stop-first"
+}
+```
+
+Dokploy dokümanındaki `start-first`/zero-downtime örneğini bu projede kullanma. Eski ve yeni container'ın aynı anda volume'a yazması veri kaybına yol açabilir. Güvenli deployment kısa bir planlı kesinti oluşturur.
+
+İsteğe bağlı başlangıç kaynak sınırları Dokploy'un beklediği ham birimlerle girilmelidir:
+
+| Kaynak | Örnek değer |
+|---|---:|
+| Memory Reservation | `268435456` byte |
+| Memory Limit | `1073741824` byte |
+| CPU Reservation | `250000000` nanoCPU |
+| CPU Limit | `1000000000` nanoCPU |
+
+Yedek ve Pillow görsel işlemleri için memory limit'i gerçek kullanım grafikleriyle doğrula.
+
+## 10. Uygulama Domaini
+
+Cloudflare DNS'te önce DNS only olarak sunucu IP'sine kayıt oluştur:
+
+| Tür | İsim | Hedef |
+|---|---|---|
+| A | `@` | Oracle Reserved Public IP |
+| CNAME | `www` | `example.com` |
+
+Application `Domains` bölümünde ana domaini oluştur:
+
+| Alan | Değer |
+|---|---|
+| Host | `example.com` |
+| Path | `/` |
+| Container Port | `8000` |
+| HTTPS | Açık |
+| Certificate | Let's Encrypt |
+
+Domain ayarındaki Container Port yalnız Traefik'in container'a yönleneceği iç porttur; host portu yayınlamaz. `Advanced -> Ports` bölümünü boş bırak.
+
+`www.example.com` domainini de ekle ve `Advanced -> Redirects` altında kalıcı `www -> apex` yönlendirmesi tanımla. Sertifikalar çalıştıktan sonra Cloudflare kayıtlarını Proxied yap ve SSL/TLS modunu Full (strict) olarak koru.
+
+## 11. İlk Deployment
+
+`Deploy` çalıştır ve şu kontroller tamamlanmadan production kabul etme:
 
 - Docker image başarıyla oluşturuldu.
 - Gunicorn `0.0.0.0:8000` üzerinde başladı.
-- Container healthcheck healthy oldu.
-- Domain geçerli Let's Encrypt sertifikasıyla açıldı.
-
-Uygulama storage initialization için ayrı bir başarı logu üretmez. İlk deployment sonrasında Coolify terminalinden `/app/storage/.initialized`, `state/site.json`, `state/messages.json`, `branding/profile.png` ve `branding/favicon.png` dosyalarının varlığını; `uploads` dizininin yazılabilir olduğunu doğrula.
-
-Ardından Cloudflare'daki `@` ve `www` kayıtlarını Proxied yap. Coolify'da `www` adresini ana domaine yönlendir.
-
-Son güvenlik adımı olarak Oracle NSG üzerindeki `80/443` kaynaklarını `0.0.0.0/0` yerine Cloudflare'ın güncel IP aralıklarıyla sınırlandır. Güncel listeyi [Cloudflare IP Ranges](https://www.cloudflare.com/ips/) sayfasından al; statik bir kopyayı dokümandan kullanma. Böylece origin IP bilinse bile Cloudflare rate-limit ve güvenlik kuralları atlanamaz.
-
-Bu kısıtlamadan sonra DNS kaydını DNS only yaparsan origin erişimi ve sertifika yenilemesi kesilebilir. Bakım sırasında doğrudan erişim gerekirse yalnız geçici ve kontrollü bir NSG kuralı aç.
-
-## 10. Yayın Kontrolü
+- Swarm task `running` ve container healthy durumda.
+- Traefik domaini container portu `8000` üzerinden açıyor.
+- `/healthz` dışarıdan `204` döndürüyor.
+- `/app/storage` gerçekten `mcv-storage` volume'una bağlı.
 
 Dışarıdan doğrula:
 
 ```bash
-curl --fail --silent --show-error https://example.com/healthz
+curl --fail --silent --show-error --output /dev/null --write-out '%{http_code}\n' https://example.com/healthz
 curl --head https://example.com
 curl --head https://www.example.com
 ```
@@ -252,162 +285,174 @@ Fonksiyonel kontrol:
 
 1. Ana sayfayı ve blogu aç.
 2. `/admin/giris` üzerinden giriş yap.
-3. Bir test içeriği veya görseli kaydet.
-4. Yeniden deployment çalıştır.
-5. Kaydedilen içeriğin kaldığını doğrula.
-6. İletişim formundan test mesajı gönder.
-7. Mesajın yönetim panelinde göründüğünü doğrula.
-8. `/admin/yedekleme` üzerinden bir uygulama yedeği indir ve ZIP'in açılabildiğini doğrula.
+3. Mevcut bir blog yazısı ve medya URL'sini aç.
+4. Bir test görseli yükle ve dışarıdan erişildiğini doğrula.
+5. Redeploy çalıştır; içeriğin ve görselin kaldığını doğrula.
+6. `/admin/yedekleme` üzerinden ZIP indir ve açılabildiğini kontrol et.
+7. Test içeriğini temizle.
 
-Production'a doğrulama kaydı eklediysen işlem sonunda test yazısını, görseli ve mesajı temizle.
+İlk doğrulama tamamlandıktan sonra GitHub provider kullanıyorsan General bölümünde Auto Deploy'u aç. Branch'in `main` olduğunu doğrula.
 
-Oracle port kontrolünde `8000`, `6001` ve `6002` dışarıdan kapalı olmalıdır.
+## 12. Coolify'dan Veri Taşıma
 
-## 11. Cloudflare Güvenlik Kuralları
+Yeni Dokploy deployment'ı doğrulandıktan sonra:
 
-Minimum öneriler:
+1. Eski siteden alınan mCV ZIP yedeğini hazır tut.
+2. Dokploy uygulamasında production admin hesabıyla giriş yap.
+3. `/admin/yedekleme` sayfasında ZIP'i ve mevcut admin parolasını kullanarak geri yükle.
+4. Site, blog, mesajlar, branding ve upload dosyalarını doğrula.
+5. Yeni bir Dokploy Volume Backup al.
+6. DNS'i yeni Dokploy sunucusuna yönlendir.
+7. Cloudflare cache'i temizle ve dış kontrolleri tekrarla.
+8. Eski Coolify sunucusunu yalnız belirlenen geri dönüş süresi tamamlandıktan sonra kapat.
+
+Admin ZIP uygulama kodunu veya secret'ları içermez. Environment değerleri Dokploy'da ayrıca tanımlanmalıdır.
+
+## 13. Cloudflare Güvenliği
+
+Minimum üretim kontrolleri:
 
 - `/admin/giris` için rate limit veya Managed Challenge uygula.
 - `/iletisim` POST istekleri için rate limit uygula.
 - `/admin/*` ve dinamik HTML üzerinde Cache Everything kullanma.
-- `/media/branding/*` için cache bypass veya düşük TTL kullan.
-- `/media/*` için Cache Everything kullanma; uygulama silinen dosyaların edge cache'te kalmaması için yeniden doğrulama ister.
-- Uygulama içinde login veya iletişim formu rate limit'i olmadığından ilk iki kuralı isteğe bağlı değil, üretim güvenlik kontrolü olarak değerlendir.
-- Container portunu yalnız Coolify proxy ağına açık tut. Uygulama bir proxy katmanından gelen `X-Forwarded-Proto` değerine güvenir.
-- HSTS, frame koruması, Referrer-Policy ve gerekiyorsa CSP başlıklarını Coolify proxy veya Cloudflare katmanında tanımla ve önce staging ortamında doğrula.
+- `/media/*` için cache bypass veya düşük TTL kullan.
+- HSTS'yi yalnız HTTPS tamamen doğrulandıktan sonra etkinleştir.
+- Gerekirse Traefik middleware ile HSTS, frame koruması, Referrer-Policy ve CSP ekle.
+- Oracle NSG `80/443` kaynaklarını geçiş tamamlandıktan sonra Cloudflare'ın güncel IP aralıklarıyla sınırlandır.
 
-Profil ve favicon sabit isimle güncellendiği için değişiklik sonrasında Cloudflare cache purge gerekebilir.
+Uygulama `ProxyFix(x_proto=1)` kullanır. Container portu güvenilmeyen istemcilere doğrudan açılırsa sahte `X-Forwarded-Proto` başlığına güvenebilir; bu nedenle trafik yalnız Dokploy Traefik üzerinden gelmelidir.
 
-## 12. Yedekleme
+## 14. Yedekleme Stratejisi
 
-İki tamamlayıcı yedek katmanı kullan:
+Üç ayrı yedek katmanı kullan:
 
-| Yedek | Temel amaç | Kapsam | Kapsamadığı |
-|---|---|---|---|
-| Admin mCV ZIP | Taşınabilir uygulama verisi | Site, mesaj, blog, upload ve branding | Kod, secret, Coolify ayarları |
-| `mcv-storage` volume | Uygulama felaket kurtarma | `/app/storage` içeriğinin tamamı | Image, environment, Coolify veritabanı |
-| Coolify instance | Kontrol düzlemi kurtarma | Coolify veritabanı ve resource ayarları | Uygulama volume'u ve `/data/coolify/source/.env` |
+| Yedek | Kapsam | Kapsamadığı |
+|---|---|---|
+| Admin mCV ZIP | Site, mesaj, blog, upload, branding | Kod, secret, Dokploy ayarları |
+| Dokploy Volume Backup | `mcv-storage` içeriğinin tamamı | Image, environment, Dokploy control-plane |
+| Dokploy Backup | `/etc/dokploy` ve `dokploy-postgres` | Application named volume |
 
-### Uygulama içi taşınabilir yedek
+### Admin ZIP
 
-`/admin/yedekleme` sayfasından indirilen sürümlü ZIP şunları içerir:
+ZIP arşivi SHA-256 manifesti içerir fakat şifreli veya dijital imzalı değildir. İletişim mesajları kişisel veri içerebilir; arşivi şifreli, erişimi sınırlı ve sunucu dışı bir yerde sakla.
 
-- Site ayarları ve iletişim mesajları
-- Markdown blog yazıları
-- Yüklenen görseller
-- Profil görseli ve favicon
-- Dosya boyutu ve SHA-256 sağlama toplamlarını içeren manifest
+Geri yükleme mevcut `state`, `blog`, `uploads` ve `branding` dizinlerini tamamen değiştirir. Volume üzerinde mevcut veri, staging kopyası ve geçici ZIP için yeterli boş alan bırak. Büyük yedek işlemleri tek senkron worker'ı geçici olarak meşgul eder; düşük trafik zamanında çalıştır.
 
-ZIP uygulama kodunu, Coolify ayarlarını, `.env` secret'larını veya yönetici parolasını içermez. Arşiv şifrelenmez ve iletişim mesajları kişisel veri içerebilir; indirdikten sonra şifreli ve erişimi sınırlı bir konumda sakla.
+### Dokploy Volume Backup
 
-Geri yükleme mevcut dört veri dizinini yedekteki içerikle tamamen değiştirir. Yönetici parolası yeniden istenir; arşiv yolu, türü, dosya sayısı, boyutu ve sağlama toplamları canlı veri değiştirilmeden önce doğrulanır. Varsayılan sınırlar 256 MB yüklenen ZIP, 512 MB açılmış veri ve 5.000 dosyadır. İşlem sırasında mevcut veri ile staging kopyası aynı volume'da bulunduğu için volume üzerinde yedek boyutunun en az iki katı kadar güvenli boş alan bırak.
-
-Yedek oluşturma ve geri yükleme tek senkron worker üzerinde çalışır; büyük arşivlerde diğer istekler işlem tamamlanana kadar bekleyebilir. Bu işlemleri düşük trafik zamanında yap, sekmeyi kapatma ve tamamlandıktan sonra uygulama loglarını kontrol et.
-
-Uygulama ZIP'i sürümler arası içerik taşıma ve hızlı elle kurtarma içindir. Altyapı arızası, hatalı volume veya Coolify kaybı için aşağıdaki bağımsız yedeklerin yerine geçmez.
-
-### Coolify ve volume yedeği
-
-Cloudflare R2 üzerinde private bir `coolify-backups` bucket oluştur. Yalnız bu bucket için Object Read & Write yetkili R2 token üret.
-
-Coolify S3 Storage değerleri:
+Önce Dokploy'da Cloudflare R2 veya başka bir S3 destination tanımla. R2 örneği:
 
 ```text
 Endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
-Bucket: coolify-backups
+Bucket: dokploy-backups
 Region: auto
-Access Key: R2 Access Key ID
-Secret Key: R2 Secret Access Key
+Access Key: yalnız bu bucket için yetkili key
+Secret Key: yalnız bu bucket için secret
 ```
 
-İki ayrı yedek planı oluştur:
+Application `Volume Backups` bölümünde:
 
-| Yedek | Sıklık | Saklama |
-|---|---|---|
-| Coolify instance | Günlük | R2 üzerinde 30 kopya |
-| `mcv-storage` volume | Günlük | R2 üzerinde 30 kopya |
+| Ayar | Değer |
+|---|---|
+| Name | `mcv-storage-daily` |
+| Schedule | `0 3 * * *` |
+| Destination | Yapılandırılan S3/R2 destination |
+| Service | mCV application |
+| Volume | `mcv-storage` |
+| Turn off Container | Açık |
+| Enabled | Açık |
 
-Volume backup ayarında `Stop containers while creating the archive` seçeneğini aç. Böylece JSON, Markdown ve görseller aynı tutarlı noktadan arşivlenir.
+`Turn off Container` tutarlı JSON, Markdown ve görsel yedeği için zorunludur; kısa bir günlük kesinti oluşturur. R2 lifecycle ile örneğin 30 günlük saklama uygula ve backup failure bildirimi tanımla.
 
-Coolify instance backup uygulama volume'unu ve `/data/coolify/source/.env` dosyasını içermez. Bu dosya şifreli olarak ayrıca yedeklenmeli, `APP_KEY` de parola yöneticisinde tutulmalıdır.
+### Dokploy Control-plane Backup
 
-En az bir volume arşivini ayrı bir test resource'una elle geri yükleyerek doğrula. Aynı ortamda uygulama ZIP geri yüklemesini de test et; üretim volume'unu ve secret'larını test resource'uyla paylaşma. İndirilmemiş ve geri yüklenmemiş backup doğrulanmış sayılmaz.
+`Web Server -> Backups` altında günlük Dokploy backup'ı oluştur. Bu yedek `/etc/dokploy` ile `dokploy-postgres` veritabanını kapsar; `mcv-storage` için ayrıca Volume Backup gerekir.
 
-### Volume geri yükleme runbook'u
+En az üç ayda bir ayrı bir test volume'una restore tatbikatı yap. Doğrulanmamış yedeği başarılı kabul etme.
 
-1. Coolify'da uygulamayı durdur; restore boyunca volume'a yazan container bırakma.
-2. Resource ayarından `/app/storage` mount'una bağlı gerçek Docker volume adını kaydet. Görünen kaynak adı Coolify tarafından prefix almış olabilir; tahmin etme.
-3. Mevcut volume'un restore öncesi güvenlik arşivini al ve farklı bir konumda sakla.
-4. Geri yüklenecek arşivin kök seviyesini doğrula; hedefte doğrudan `.initialized`, `state`, `blog`, `uploads` ve `branding` bulunmalıdır.
-5. Önce ayrı bir test volume'una geri yükle. Dosya sahipliğini runtime kullanıcısı `10001:10001` ile uyumlu hale getir.
-6. `state/site.json`, `state/messages.json`, `branding/profile.png` ve `branding/favicon.png` dosyalarını doğrula.
-7. Test resource'unu ayrı secret'larla başlat; `/healthz`, admin girişi, blog ve medya erişimini kontrol et.
-8. Aynı doğrulanmış prosedürü production volume'una uygula, uygulamayı başlat ve yayın kontrol listesini çalıştır.
-9. Eski volume veya güvenlik arşivini yalnız doğrulama ve belirlenen saklama süresi tamamlandıktan sonra kaldır.
+## 15. Volume Geri Yükleme
 
-Coolify sürümüne göre volume arşivi geri yükleme arayüzü değişebilir. Dashboard otomatik restore sunmuyorsa arşivi sunucuda kontrollü olarak aç; çalışan container'ın dosyalarının üzerine doğrudan yazma.
+Dokploy `Volume Backups -> Restore Volume` akışını kullan:
 
-## 13. Güncelleme ve Bakım
+1. Uygulamayı durdur.
+2. Kullanımdaki mevcut volume'un ayrıca güvenlik yedeğini al.
+3. S3 destination ve doğru backup dosyasını seç.
+4. Restore hedefi olarak kullanılacak volume adını doğrula.
+5. Hedef volume'un mevcut olmadığından ve hiçbir container tarafından kullanılmadığından emin ol.
+6. Restore tamamlandıktan sonra Application mount'unu geri yüklenen volume'a bağla.
+7. Sahipliğin `10001:10001` kullanıcısıyla uyumlu olduğunu doğrula.
+8. Uygulamayı başlat ve yayın kontrol listesini çalıştır.
 
-### Uygulama güncelleme akışı
+Mevcut volume'u silmek gerekiyorsa önce sunucu dışı güvenlik kopyası almadan işlem yapma. Çalışan container'ın kullandığı volume üzerine restore deneme.
 
-1. Değişiklikleri yerelde `python -m pytest -q` ile doğrula.
-2. Yönetim panelinden güncel uygulama ZIP'ini indir. Veri modeli veya storage davranışı değişiyorsa container'ı durduran bir `mcv-storage` volume yedeği de al.
-3. Önceki çalışan image'ın `Configuration -> Rollback` listesinde bulunduğunu ve aktif başka deploy/restore işlemi olmadığını doğrula.
-4. Değişiklikleri `main` branch'ine gönder. Auto Deploy kapalıysa Coolify uygulamasında `Deploy` çalıştır.
-5. Stop-first kesinti boyunca build ve başlangıç loglarını izle; yeni container healthy olmadan işlemi başarılı kabul etme.
-6. Beklenen commit/image'ın çalıştığını, `/healthz`, ana sayfa, blog, `/admin/giris`, mevcut bir medya URL'si ve yedek indirmeyi doğrula.
-7. Admin panelinde daha önce kaydedilmiş içeriğin, mesajların ve görsellerin kaldığını ve loglarda yeni exception bulunmadığını kontrol et.
+## 16. Güncelleme ve Rollback
 
-Yeni image içindeki `seed/` değişikliklerinin mevcut volume'a otomatik uygulanmadığını unutma. İçerik değişikliklerini kod deployment'ı üzerinden production verisine taşımaya çalışma.
+### Uygulama güncelleme
 
-### Geri dönüş
+1. Yerelde `python -m pytest -q` çalıştır.
+2. Admin ZIP ve son başarılı Volume Backup durumunu doğrula.
+3. Aktif restore/deploy işlemi olmadığını kontrol et.
+4. Değişiklikleri `main` branch'ine gönder veya Dokploy'da `Deploy` çalıştır.
+5. `stop-first` kesinti boyunca deployment ve application loglarını izle.
+6. Healthcheck, ana sayfa, admin girişi, blog ve medya erişimini doğrula.
 
-Coolify `Configuration -> Rollback` bölümünden önceki çalışan image'ı seçip deploy et. Image rollback yalnız uygulama kodunu geri alır; persistent volume'u, ortam değişkenlerini veya dış servisleri eski haline getirmez.
+### Otomatik Swarm rollback
 
-Güncelleme kalıcı veriyi değiştirdiyse ya da hatalı bir geri yükleme yapıldıysa uygulamayı durdur ve aynı yayın noktasında alınmış `mcv-storage` yedeğini ayrıca geri yükle. Kod ile veri yedeğinin birbiriyle uyumlu olduğundan emin ol. Geri dönüşten sonra sağlık, admin girişi, blog ve medya kontrollerini yeniden çalıştır.
+Health Check ve Update Config doğru tanımlandığında yeni task healthcheck'i geçemezse `FailureAction: rollback` önceki service spec'e döner. Bu geri dönüş yalnız container/image durumunu etkiler; volume verisini eski haline getirmez.
 
-### Sürekli bakım
+### Belirli sürüme manuel rollback
 
-- İlk başarılı ve doğrulanmış yayından sonra Auto Deploy'u aç.
-- Deployment ve backup failure bildirimlerini Telegram veya e-posta ile gönder.
-- Coolify güncellemeden önce instance backup al.
-- Docker Cleanup eşiğini yüzde 80 kullan.
-- Delete Unused Volumes seçeneğini kapalı tut.
-- Sunucuyu dışarıdan bir uptime servisiyle izle.
-- Production veritabanlarını ve yönetim portlarını internete açma.
+Her deployment sürümüne dönebilmek için Dokploy'da bir Docker registry yapılandır, Application `Deployments -> Rollback Settings` altında rollback'i etkinleştir ve registry seç. Deployment listesindeki ilgili sürümün `Rollback` işlemini kullan.
 
-Dosya tabanlı storage ile worker, thread veya replica sayısını artırma. Daha yüksek paralellik gerektiğinde veriyi PostgreSQL gibi transaction destekli bir sisteme taşı.
+Veri formatı veya içerik değiştiyse uygulamayı durdurup aynı yayın noktasında alınmış Volume Backup'ı ayrıca geri yükle. Kod rollback ile veri rollback birbirinden bağımsızdır.
 
-### Coolify kontrol düzlemi bakımı
+## 17. Dokploy Bakımı
 
-Coolify güncellemesi mCV application deployment'ından ayrıdır. Güncellemeden önce instance backup'ın güncel olduğunu, `/data/coolify/source/.env` ve `APP_KEY` kopyalarının erişilebilir olduğunu doğrula; release notlarını incele ve aktif application deployment olmadığından emin ol. Güncellemeden sonra beklenen Coolify sürümünü, proxy'yi, sunucu bağlantısını ve tüm resource durumlarını kontrol et. Coolify downgrade uygulama image'ını veya `mcv-storage` verisini geri almaz.
+Dokploy güncellemesi uygulama deployment'ından ayrıdır. Önce control-plane backup ve volume backup durumunu doğrula, release notlarını incele ve aktif deployment olmadığından emin ol.
+
+Güncel kararlı sürüme yükseltmek için:
+
+```bash
+curl -sSL https://dokploy.com/install.sh | sh -s update
+```
+
+Güncellemeden sonra panel, Traefik, application task'ı, domainler, backup schedule ve S3 destination durumunu kontrol et.
+
+Dokploy update işleminin Traefik image'ını otomatik olarak yükselttiğini varsayma. Traefik güncellemesini resmi manual-installation prosedürüne göre ayrı bakım penceresinde yap ve routing kesintisi planla.
 
 ## Sorun Giderme
 
 | Belirti | Kontrol |
 |---|---|
-| Container hemen kapanıyor | Üç zorunlu secret'ın dolu olduğunu kontrol et |
-| `502 Bad Gateway` | Ports Exposes ve domain hedef portunun `8000` olduğunu kontrol et |
-| Healthcheck unhealthy | `/app/storage` volume izinlerini ve container loglarını kontrol et |
-| Cloudflare `522` | Oracle NSG üzerinde `80/443` kurallarını kontrol et |
-| Cloudflare `526` | Coolify origin sertifikasının hostname ve süresini kontrol et; Flexible kullanma |
-| Redirect döngüsü | Flexible yerine Full (strict) kullan |
-| İçerik deployment sonrası kayboluyor | `/app/storage` Volume Mount bağlantısını kontrol et |
-| Admin login kalıcı olmuyor | Siteye HTTPS üzerinden erişildiğini kontrol et |
-| Profil veya favicon eski | Cloudflare cache'ini temizle |
-| Yedek indirilemiyor | `/app/storage` boş alanını ve container loglarını kontrol et |
-| Geri yükleme reddediliyor | ZIP'in mCV manifestini, 256 MB istek sınırını ve yönetici parolasını kontrol et |
-| Geri yükleme sırasında alan hatası | Volume'da mevcut veri ve staging kopyası için yeterli boş alan aç |
-| ARM64 build hatası | Bağımlı image veya paketin `linux/arm64` desteğini kontrol et |
+| Container hemen kapanıyor | Üç zorunlu environment değerini ve minimum uzunlukları kontrol et |
+| Swarm task başlamıyor | `mcv-storage` mount adını, yolunu ve server üzerindeki gerçek Swarm hatasını kontrol et |
+| `502 Bad Gateway` | Domain Container Port değerinin `8000`, Gunicorn bind adresinin `0.0.0.0` olduğunu kontrol et |
+| Domain `404` | Application domainini ve Traefik file-system config/loglarını kontrol et |
+| Healthcheck başarısız | `/app/storage` yazılabilirliğini ve `/healthz` iç isteğini kontrol et |
+| Redeploy sonrası veri kayıp | Named volume'un `/app/storage` yoluna bağlı olduğunu kontrol et |
+| Admin login kalıcı olmuyor | HTTPS ve Cloudflare Full (strict) ayarını kontrol et |
+| Cloudflare `522` | Oracle NSG `80/443`, DNS IP ve Traefik durumunu kontrol et |
+| Cloudflare `526` | Dokploy/Traefik origin sertifikasını ve hostname eşleşmesini kontrol et |
+| Yedek indirilemiyor | `mcv-storage` boş alanını ve application loglarını kontrol et |
+| Volume Backup görünmüyor | Mount'un bind değil Docker named volume olduğunu kontrol et |
+| Volume restore başarısız | Hedef volume'un mevcut veya kullanımda olmadığını kontrol et |
+| Deployment veri yarışı riski | Replica `1` ve Update Order `stop-first` olduğunu kontrol et |
 
 ## Resmi Kaynaklar
 
-- [Coolify self-hosted installation](https://coolify.io/docs/start-with-self-hosted)
-- [Coolify Dockerfile deployment](https://coolify.io/docs/applications/builds/dockerfile)
-- [Coolify persistent storage](https://coolify.io/docs/applications/configuration/persistent-storage)
-- [Coolify rolling updates](https://coolify.io/docs/applications/deployments/rolling-updates)
-- [Coolify rollbacks](https://coolify.io/docs/applications/deployments/rollbacks)
-- [Coolify firewall](https://coolify.io/docs/core/infrastructure/servers/firewall)
+- [Dokploy Installation](https://docs.dokploy.com/docs/core/installation)
+- [Dokploy Applications](https://docs.dokploy.com/docs/core/applications)
+- [Dokploy Dockerfile Build Type](https://docs.dokploy.com/docs/core/applications/build-type)
+- [Dokploy Advanced Settings](https://docs.dokploy.com/docs/core/applications/advanced)
+- [Dokploy Domains](https://docs.dokploy.com/docs/core/domains)
+- [Dokploy Cloudflare](https://docs.dokploy.com/docs/core/domains/cloudflare)
+- [Dokploy Auto Deploy](https://docs.dokploy.com/docs/core/auto-deploy)
+- [Dokploy Volume Backups](https://docs.dokploy.com/docs/core/volume-backups)
+- [Dokploy Control-plane Backups](https://docs.dokploy.com/docs/core/backups)
+- [Dokploy Rollbacks](https://docs.dokploy.com/docs/core/applications/rollbacks)
+- [Dokploy Production Hardening](https://docs.dokploy.com/docs/core/guides/production-hardening)
+- [Dokploy Manual Installation and Traefik Updates](https://docs.dokploy.com/docs/core/manual-installation)
 - [Cloudflare Full strict](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/)
 - [Oracle network security rules](https://docs.oracle.com/en-us/iaas/Content/Network/Concepts/securityrules.htm)
+- [Oracle Compute security best practices](https://docs.oracle.com/en-us/iaas/Content/Compute/References/bestpracticescompute.htm)
+- [Oracle Ubuntu UFW known issue](https://docs.oracle.com/en-us/iaas/Content/Compute/known-issues.htm#ufw)
