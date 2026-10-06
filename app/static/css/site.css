@@ -358,6 +358,7 @@ input::placeholder, textarea::placeholder { color: #74849c; }
   .timeline-item::before { left: 3px; }
   .timeline-meta { text-align: left; }
   .timeline-meta span { display: none; }
+  .timeline--education .timeline-meta span { display: block; }
   .resume-side { display: block; }
   .filter-list { margin-top: 5px; }
   .project-card__visual { height: 190px; }
