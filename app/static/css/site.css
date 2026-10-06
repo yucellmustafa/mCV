@@ -189,6 +189,7 @@ textarea { padding: 12px 13px; resize: vertical; }
 input:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(var(--blue-rgb), .09); }
 input::placeholder, textarea::placeholder { color: #74849c; }
 .contact-form > label, .contact-form > .field-row { margin-bottom: 17px; }
+.contact-form__note { margin: -2px 0 18px; color: var(--dim); font-size: .62rem; line-height: 1.65; }
 
 .inner-page { min-height: 100vh; }
 .inner-shell { position: relative; z-index: 1; width: min(1160px, calc(100% - 40px)); margin: 0 auto; }

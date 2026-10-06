@@ -88,11 +88,9 @@ def create_app(test_config=None):
 
     @app.context_processor
     def inject_globals():
-        messages = app.extensions["content"].get_messages()
         return {
             "csrf_token": session.get("csrf_token", ""),
             "site_content": app.extensions["content"].get_site(),
-            "unread_message_count": sum(not message.get("read", False) for message in messages),
         }
 
     return app

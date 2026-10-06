@@ -52,19 +52,14 @@ def _copy_missing_tree(source, target):
             _atomic_copy(source_path, target_path)
 
 
-def _validate_state(site_path, messages_path):
-    expected_types = ((site_path, dict), (messages_path, list))
-    values = []
-    for path, expected_type in expected_types:
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as error:
-            raise RuntimeError(f"Geçersiz JSON dosyası: {path}") from error
-        if not isinstance(value, expected_type):
-            raise RuntimeError(f"Beklenmeyen JSON yapısı: {path}")
-        values.append(value)
+def _validate_state(site_path):
+    try:
+        site = json.loads(site_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Geçersiz JSON dosyası: {site_path}") from error
+    if not isinstance(site, dict):
+        raise RuntimeError(f"Beklenmeyen JSON yapısı: {site_path}")
 
-    site = values[0]
     required_sections = ("branding", "contact", "profile")
     invalid_sections = [name for name in required_sections if not isinstance(site.get(name), dict)]
     if invalid_sections:
@@ -84,22 +79,18 @@ def initialize_storage(storage_root, seed_root):
 
     marker = storage_root / ".initialized"
     site_path = state_dir / "site.json"
-    messages_path = state_dir / "messages.json"
     initializing = not marker.exists()
 
     if initializing:
         if not site_path.exists():
             _atomic_copy(seed_root / "site.json", site_path)
             site_path.chmod(0o600)
-        if not messages_path.exists():
-            _atomic_write_text(messages_path, "[]\n")
         _copy_missing_tree(seed_root / "blog", blog_dir)
         _copy_missing_tree(seed_root / "uploads", upload_dir)
         _copy_missing_tree(seed_root / "branding", branding_dir)
 
     required_files = (
         site_path,
-        messages_path,
         branding_dir / "profile.png",
         branding_dir / "favicon.png",
     )
@@ -107,7 +98,7 @@ def initialize_storage(storage_root, seed_root):
     if missing:
         raise RuntimeError(f"Kalıcı depolama eksik: {', '.join(missing)}")
 
-    _validate_state(site_path, messages_path)
+    _validate_state(site_path)
 
     try:
         fd, probe_name = tempfile.mkstemp(dir=storage_root, prefix=".write-test-")
@@ -131,7 +122,6 @@ class ContentRepository:
     def __init__(self, root):
         self.root = Path(root)
         self.site_path = self.root / "state" / "site.json"
-        self.messages_path = self.root / "state" / "messages.json"
         self.blog_dir = self.root / "blog"
         self.blog_dir.mkdir(parents=True, exist_ok=True)
 
@@ -147,7 +137,7 @@ class ContentRepository:
 
     def is_ready(self):
         try:
-            _validate_state(self.site_path, self.messages_path)
+            _validate_state(self.site_path)
         except (OSError, RuntimeError):
             return False
         return self.blog_dir.is_dir() and os.access(self.root, os.W_OK)
@@ -157,31 +147,6 @@ class ContentRepository:
 
     def save_site(self, site):
         self._write_json(self.site_path, site)
-
-    def get_messages(self):
-        return self._read_json(self.messages_path, [])
-
-    def add_message(self, payload):
-        messages = self.get_messages()
-        messages.insert(0, {
-            "id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
-            "created_at": datetime.now().isoformat(timespec="minutes"),
-            "read": False,
-            **payload,
-        })
-        self._write_json(self.messages_path, messages)
-
-    def mark_message_read(self, message_id):
-        messages = self.get_messages()
-        for message in messages:
-            if message["id"] == message_id:
-                message["read"] = True
-                break
-        self._write_json(self.messages_path, messages)
-
-    def delete_message(self, message_id):
-        messages = [m for m in self.get_messages() if m["id"] != message_id]
-        self._write_json(self.messages_path, messages)
 
     def list_posts(self, published_only=True):
         posts = []

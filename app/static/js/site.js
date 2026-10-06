@@ -101,6 +101,22 @@ document.addEventListener("DOMContentLoaded", () => {
     setPortfolioMenu(false);
   }
 
+  const contactForm = document.querySelector(".contact-form[data-email-recipient]");
+  if (contactForm) {
+    contactForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!contactForm.reportValidity()) return;
+
+      const formData = new FormData(contactForm);
+      const recipient = contactForm.dataset.emailRecipient.trim();
+      const name = String(formData.get("name") || "").trim();
+      const subject = String(formData.get("subject") || "").trim() || `Web sitesi iletişimi - ${name}`;
+      const message = String(formData.get("message") || "").trim();
+      const body = [`Merhaba,`, "", message, "", `Gönderen: ${name}`].join("\n");
+      window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    });
+  }
+
   const adminMenuToggle = document.querySelector(".admin-menu-toggle");
   const adminMenu = document.querySelector(".admin-sidebar");
   const adminMenuBackdrop = document.querySelector(".admin-menu-backdrop");

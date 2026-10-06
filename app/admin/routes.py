@@ -192,12 +192,10 @@ def logout():
 @admin_required
 def dashboard():
     posts = repository().list_posts(published_only=False)
-    messages = repository().get_messages()
     return render_template(
         "admin/dashboard.html",
         site=repository().get_site(),
         posts=posts,
-        messages=messages,
     )
 
 
@@ -503,24 +501,3 @@ def blog_image_delete():
     if not delete_uploaded_image(image_url):
         return jsonify(error="Bu görsel başka bir içerikte kullanıldığı için silinemedi."), 409
     return jsonify(deleted=True)
-
-
-@bp.get("/mesajlar")
-@admin_required
-def messages():
-    return render_template("admin/messages.html", messages=repository().get_messages())
-
-
-@bp.post("/mesajlar/<message_id>/okundu")
-@admin_required
-def message_read(message_id):
-    repository().mark_message_read(message_id)
-    return redirect(url_for("admin.messages"))
-
-
-@bp.post("/mesajlar/<message_id>/sil")
-@admin_required
-def message_delete(message_id):
-    repository().delete_message(message_id)
-    flash("Mesaj silindi.", "success")
-    return redirect(url_for("admin.messages"))

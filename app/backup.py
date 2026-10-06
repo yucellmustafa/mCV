@@ -14,13 +14,12 @@ from .content import _validate_state
 
 
 BACKUP_FORMAT = "mcv-backup"
-BACKUP_VERSION = 1
+BACKUP_VERSION = 2
 MANIFEST_NAME = "manifest.json"
 BACKUP_DIRECTORIES = ("state", "blog", "uploads", "branding")
 BACKUP_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 REQUIRED_FILES = {
     "state/site.json",
-    "state/messages.json",
     "branding/profile.png",
     "branding/favicon.png",
 }
@@ -92,7 +91,7 @@ def _safe_archive_path(name):
     if not BACKUP_FILENAME_PATTERN.fullmatch(filename) or filename.endswith((".", " ")):
         raise BackupError("Arşivde geçersiz bir dosya adı var.")
     directory = path.parts[0]
-    if directory == "state" and name not in {"state/site.json", "state/messages.json"}:
+    if directory == "state" and name != "state/site.json":
         raise BackupError("Yedekte desteklenmeyen bir durum dosyası var.")
     if directory == "blog" and path.suffix.lower() != ".md":
         raise BackupError("Yedekte desteklenmeyen bir blog dosyası var.")
@@ -194,7 +193,7 @@ def _extract_and_validate(archive, destination, entries, infos):
     for directory_name in BACKUP_DIRECTORIES:
         (destination / directory_name).mkdir(exist_ok=True)
     try:
-        _validate_state(destination / "state" / "site.json", destination / "state" / "messages.json")
+        _validate_state(destination / "state" / "site.json")
     except (OSError, RuntimeError, UnicodeDecodeError) as error:
         raise BackupError("Yedekteki site verileri geçersiz.") from error
 

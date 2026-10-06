@@ -8,7 +8,7 @@ Flask ile geliştirilmiş, yönetim panelli kişisel özgeçmiş, portfolyo ve b
 
 - Özgeçmiş, yetenek, proje ve iletişim bölümleri
 - Markdown tabanlı blog, arama ve etiket filtreleme
-- İçerik, mesaj ve görsel yönetim paneli
+- İçerik ve görsel yönetim paneli
 - Yönetici parolasıyla korunan tam ZIP yedekleme ve geri yükleme
 - CSRF koruması ve doğrulanan görsel yükleme
 - Docker healthcheck ve kalıcı veri volume'u
@@ -109,11 +109,11 @@ docker compose down
 
 ## Kalıcı Veri
 
-İlk açılışta `seed/site.json`, `seed/blog`, `seed/uploads` ve `seed/branding` içeriği `storage/` yapısına kopyalanır; mesaj listesi boş oluşturulur. `storage/.initialized` işaretinden sonraki açılışlar mevcut veriyi değiştirmez. Bu nedenle sonraki deployment'larda `seed/` değişiklikleri üretim verisine otomatik birleştirilmez.
+İlk açılışta `seed/site.json`, `seed/blog`, `seed/uploads` ve `seed/branding` içeriği `storage/` yapısına kopyalanır. `storage/.initialized` işaretinden sonraki açılışlar mevcut veriyi değiştirmez. Bu nedenle sonraki deployment'larda `seed/` değişiklikleri üretim verisine otomatik birleştirilmez.
 
 ```text
 storage/
-├── state/       Site ayarları ve mesajlar
+├── state/       Site ayarları
 ├── blog/        Markdown yazıları
 ├── uploads/     Proje ve blog görselleri
 └── branding/    Profil görseli ve favicon
@@ -125,7 +125,7 @@ Yerel Compose ve Dokploy üretim kurulumu kalıcı veriyi `/app/storage` yolunda
 
 Yönetim panelindeki `/admin/yedekleme` sayfası taşınabilir bir mCV ZIP yedeği oluşturur. Arşiv şunları içerir:
 
-- Site ayarları ve iletişim mesajları
+- Site ayarları
 - Blog yazıları
 - Yüklenen proje ve blog görselleri
 - Profil görseli ve favicon
@@ -133,13 +133,13 @@ Yönetim panelindeki `/admin/yedekleme` sayfası taşınabilir bir mCV ZIP yede�
 
 Geri yükleme arşiv yollarını, dosya türlerini, dosya sayısını, açılmış toplam boyutu ve sağlama toplamlarını doğrular. Doğrulama tamamlanmadan canlı veri değiştirilmez; işlem yönetici parolasının yeniden girilmesini gerektirir. Varsayılan limitler yüklenen ZIP için 256 MB, açılmış içerik için 512 MB ve 5.000 dosyadır.
 
-Geri yükleme, mevcut `state`, `blog`, `uploads` ve `branding` içeriğini yedekteki sürümle tamamen değiştirir. İşlemden önce güncel bir yedek indirin. ZIP dosyası uygulama kodunu, `.env` değerlerini veya yönetici parolasını içermez. İletişim mesajları kişisel veri içerebileceğinden arşivi şifreli ve erişimi sınırlı bir yerde saklayın.
+Geri yükleme, mevcut `state`, `blog`, `uploads` ve `branding` içeriğini yedekteki sürümle tamamen değiştirir. İşlemden önce güncel bir yedek indirin. ZIP dosyası uygulama kodunu, `.env` değerlerini veya yönetici parolasını içermez.
 
 Admin ZIP yedeği uygulama verisini taşımak ve elle geri yüklemek içindir. Dokploy control-plane ve named volume yedekleriyle birlikte kullanılmalı, onların yerine geçmemelidir.
 
 ## Davranış ve Sınırlar
 
-- İletişim formu e-posta göndermez; mesajları `storage/state/messages.json` içinde admin paneli için saklar.
+- İletişim formu veriyi sunucuya göndermez veya saklamaz; ziyaretçinin kendi e-posta uygulamasını alıcı, konu ve içerik hazırlanmış şekilde açar.
 - Normal HTTP isteklerinin toplam üst sınırı 5 MB'tır. Görsel yüklemelerinde PNG, JPG, JPEG, WEBP ve GIF desteklenir.
 - `/healthz`, storage ve temel JSON şeması hazırsa `204`, kullanılamıyorsa `503` döndürür.
 - Dosya tabanlı read-modify-write modeli genel bir dağıtık kilit kullanmadığından worker, thread ve replica sayısı artırılmamalıdır.

@@ -47,7 +47,6 @@
 
     </nav>
     <div class="admin-sidebar__bottom">
-      <a class="admin-sidebar__messages {{ 'is-active' if request.endpoint in ['admin.messages', 'admin.message_read', 'admin.message_delete'] }}" href="{{ url_for('admin.messages') }}"><i data-lucide="inbox"></i><span>Gelen mesajlar</span>{% if unread_message_count %}<strong class="message-badge" aria-label="{{ unread_message_count }} okunmamış mesaj">{{ '99+' if unread_message_count > 99 else unread_message_count }}</strong>{% endif %}</a>
       <div class="admin-sidebar__footer">
         <a href="{{ url_for('main.home') }}" target="_blank"><i data-lucide="external-link"></i> Siteyi aç</a>
         <form method="post" action="{{ url_for('admin.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button><i data-lucide="log-out"></i> Çıkış yap</button></form>

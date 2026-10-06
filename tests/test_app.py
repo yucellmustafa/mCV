@@ -176,8 +176,8 @@ def test_admin_can_download_complete_backup(client):
         manifest = json.loads(archive.read("manifest.json"))
 
     assert manifest["format"] == "mcv-backup"
-    assert manifest["version"] == 1
-    assert {"state/site.json", "state/messages.json", "branding/profile.png", "branding/favicon.png"} <= names
+    assert manifest["version"] == 2
+    assert {"state/site.json", "branding/profile.png", "branding/favicon.png"} <= names
     assert {entry["path"] for entry in manifest["files"]} == names - {"manifest.json"}
 
 
@@ -235,7 +235,7 @@ def test_restore_rejects_path_traversal(client, app):
     archive_data = BytesIO()
     manifest = {
         "format": "mcv-backup",
-        "version": 1,
+        "version": 2,
         "created_at": "2026-10-03T20:00:00+00:00",
         "files": [{"path": "../outside.txt", "size": 4, "sha256": "0" * 64}],
     }
@@ -462,40 +462,15 @@ def test_home_shows_six_latest_posts_and_marks_week_old_posts_as_new(client, app
     assert "Yeni Ana Sayfa Yazısı 1" not in response.text
 
 
-def test_contact_message_is_stored(client, app):
-    client.get("/")
-    response = client.post(
-        "/iletisim",
-        data={
-            "csrf_token": csrf(client),
-            "name": "Test Kullanıcı",
-            "email": "test@example.com",
-            "subject": "Proje",
-            "message": "Birlikte çalışmak istiyorum.",
-        },
-        follow_redirects=True,
-    )
-    assert response.status_code == 200
-    assert "Mesajınız kaydedildi" in response.text
-    messages = app.extensions["content"].get_messages()
-    assert messages[0]["email"] == "test@example.com"
+def test_contact_form_opens_visitors_email_client(client):
+    response = client.get("/")
 
-
-def test_sidebar_shows_unread_message_badge(client, app):
-    repository = app.extensions["content"]
-    for message in repository.get_messages():
-        repository.mark_message_read(message["id"])
-    repository.add_message({
-        "name": "Test Kullanıcı",
-        "email": "test@example.com",
-        "subject": "Bildirim",
-        "message": "Okunmamış mesaj",
-    })
-    login(client)
-    response = client.get("/admin/")
     assert response.status_code == 200
-    assert 'class="message-badge"' in response.text
-    assert 'aria-label="1 okunmamış mesaj"' in response.text
+    assert 'class="contact-form"' in response.text
+    assert 'action="mailto:' in response.text
+    assert 'data-email-recipient=' in response.text
+    assert "Bilgileriniz bu sitede saklanmaz" in response.text
+    assert "/iletisim" not in response.text
 
 
 def test_admin_requires_authentication_and_can_login(client):
@@ -972,5 +947,5 @@ def test_same_named_uploads_get_unique_filenames(client, app):
 
 
 def test_csrf_rejects_invalid_request(client):
-    response = client.post("/iletisim", data={"name": "Test"})
+    response = client.post("/admin/cikis")
     assert response.status_code == 400

@@ -175,8 +175,7 @@ Volume yazılabilir olmalı ve image içindeki `10001:10001` kullanıcısıyla u
 /app/storage/
 ├── .initialized
 ├── state/
-│   ├── site.json
-│   └── messages.json
+│   └── site.json
 ├── blog/
 ├── uploads/
 └── branding/
@@ -300,7 +299,7 @@ Yeni Dokploy deployment'ı doğrulandıktan sonra:
 1. Eski siteden alınan mCV ZIP yedeğini hazır tut.
 2. Dokploy uygulamasında production admin hesabıyla giriş yap.
 3. `/admin/yedekleme` sayfasında ZIP'i ve mevcut admin parolasını kullanarak geri yükle.
-4. Site, blog, mesajlar, branding ve upload dosyalarını doğrula.
+4. Site, blog, branding ve upload dosyalarını doğrula.
 5. Yeni bir Dokploy Volume Backup al.
 6. DNS'i yeni Dokploy sunucusuna yönlendir.
 7. Cloudflare cache'i temizle ve dış kontrolleri tekrarla.
@@ -313,7 +312,6 @@ Admin ZIP uygulama kodunu veya secret'ları içermez. Environment değerleri Dok
 Minimum üretim kontrolleri:
 
 - `/admin/giris` için rate limit veya Managed Challenge uygula.
-- `/iletisim` POST istekleri için rate limit uygula.
 - `/admin/*` ve dinamik HTML üzerinde Cache Everything kullanma.
 - `/media/*` için cache bypass veya düşük TTL kullan.
 - HSTS'yi yalnız HTTPS tamamen doğrulandıktan sonra etkinleştir.
@@ -328,13 +326,13 @@ Uygulama `ProxyFix(x_proto=1)` kullanır. Container portu güvenilmeyen istemcil
 
 | Yedek | Kapsam | Kapsamadığı |
 |---|---|---|
-| Admin mCV ZIP | Site, mesaj, blog, upload, branding | Kod, secret, Dokploy ayarları |
+| Admin mCV ZIP | Site, blog, upload, branding | Kod, secret, Dokploy ayarları |
 | Dokploy Volume Backup | `mcv-storage` içeriğinin tamamı | Image, environment, Dokploy control-plane |
 | Dokploy Backup | `/etc/dokploy` ve `dokploy-postgres` | Application named volume |
 
 ### Admin ZIP
 
-ZIP arşivi SHA-256 manifesti içerir fakat şifreli veya dijital imzalı değildir. İletişim mesajları kişisel veri içerebilir; arşivi şifreli, erişimi sınırlı ve sunucu dışı bir yerde sakla.
+ZIP arşivi SHA-256 manifesti içerir fakat şifreli veya dijital imzalı değildir. Arşivi erişimi sınırlı ve sunucu dışı bir yerde sakla.
 
 Geri yükleme mevcut `state`, `blog`, `uploads` ve `branding` dizinlerini tamamen değiştirir. Volume üzerinde mevcut veri, staging kopyası ve geçici ZIP için yeterli boş alan bırak. Büyük yedek işlemleri tek senkron worker'ı geçici olarak meşgul eder; düşük trafik zamanında çalıştır.
 

@@ -6,7 +6,6 @@
   <article><i data-lucide="briefcase-business"></i><div><strong>{{ site.experiences | length }}</strong><span>İş deneyimi</span></div></article>
   <article><i data-lucide="panels-top-left"></i><div><strong>{{ site.projects | length }}</strong><span>Proje</span></div></article>
   <article><i data-lucide="notebook-pen"></i><div><strong>{{ posts | length }}</strong><span>Blog yazısı</span></div></article>
-  <article><i data-lucide="mail"></i><div><strong>{{ messages | rejectattr('read') | list | length }}</strong><span>Okunmamış mesaj</span></div></article>
 </div>
 <div class="admin-columns">
   <section class="admin-card"><header><div><h2>Son blog yazıları</h2><p>En son eklenen 3 içerik</p></div><a href="{{ url_for('admin.blog_list') }}">Tümünü gör</a></header>
@@ -21,7 +20,6 @@
       <a href="{{ url_for('admin.collection', name='experiences') }}"><i data-lucide="file-user"></i><span>Özgeçmiş</span></a>
       <a href="{{ url_for('admin.collection', name='projects') }}"><i data-lucide="briefcase-business"></i><span>Projeler</span></a>
       <a href="{{ url_for('admin.blog_edit') }}"><i data-lucide="square-pen"></i><span>Blog yazısı</span></a>
-      <a href="{{ url_for('admin.messages') }}"><i data-lucide="inbox"></i><span>Mesajlar</span></a>
       <a href="{{ url_for('admin.backup') }}"><i data-lucide="database-backup"></i><span>Yedekleme</span></a>
     </div>
   </section>

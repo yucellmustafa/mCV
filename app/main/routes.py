@@ -1,12 +1,8 @@
-import re
 from datetime import date
 
-from flask import abort, current_app, flash, redirect, render_template, request, send_from_directory, url_for
+from flask import abort, current_app, render_template, request, send_from_directory
 
 from . import bp
-
-
-EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def repository():
@@ -94,19 +90,3 @@ def post(slug):
     if not article:
         abort(404)
     return render_template("blog/detail.html", site=repository().get_site(), post=article)
-
-
-@bp.post("/iletisim")
-def contact():
-    data = {
-        "name": request.form.get("name", "").strip(),
-        "email": request.form.get("email", "").strip(),
-        "subject": request.form.get("subject", "").strip(),
-        "message": request.form.get("message", "").strip(),
-    }
-    if not data["name"] or not EMAIL_PATTERN.fullmatch(data["email"]) or not data["message"]:
-        flash("Lütfen ad, geçerli e-posta ve mesaj alanlarını doldurun.", "error")
-    else:
-        repository().add_message(data)
-        flash("Mesajınız kaydedildi. En kısa sürede dönüş yapacağım.", "success")
-    return redirect(url_for("main.home", _anchor="contact"))
